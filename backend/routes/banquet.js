@@ -166,34 +166,38 @@ router.put('/:id', protect, async (req, res) => {
   } catch (e) { res.status(500).json({ message: e.message }); }
 });
 
-// Cron-style: run reminders & payment alerts
-router.post('/run-alerts', protect, async (req, res) => {
+// Event reminders — 1/2/3 days before confirmed bookings
+router.post('/run-reminders', protect, async (req, res) => {
   try {
-    let reminders = 0; let paymentAlerts = 0;
-
-    // 3-day (and earlier) reminders
+    let reminders = 0;
     for (const daysAhead of [3, 2, 1]) {
-      const target = new Date(Date.now() + daysAhead*86400000);
+      const target   = new Date(Date.now() + daysAhead*86400000);
       const dayStart = new Date(target.getFullYear(), target.getMonth(), target.getDate(), 0, 0, 0);
       const dayEnd   = new Date(target.getFullYear(), target.getMonth(), target.getDate(), 23, 59, 59);
-      const bookings = await BanquetBooking.find({ bookingDate: { $gte:dayStart, $lte:dayEnd }, status:'confirmed', reminderDays: { $ne: daysAhead } });
+      const bookings = await BanquetBooking.find({ bookingDate:{$gte:dayStart,$lte:dayEnd}, status:'confirmed', reminderDays:{$ne:daysAhead} });
       for (const b of bookings) {
-        await Notif.notifyRoles(['banquet_manager'], `⏰ Event in ${daysAhead} Day(s)`, `${b.bookingRef} — ${b.eventType} for ${b.customerName} on ${new Date(b.bookingDate).toLocaleDateString('en-IN')} (${b.slot})`, 'warning', b._id, 'banquet');
+        await Notif.notifyRoles(['banquet_manager'], `Event in ${daysAhead} Day(s)`, `${b.bookingRef} — ${b.eventType} for ${b.customerName} on ${new Date(b.bookingDate).toLocaleDateString('en-IN')} (${b.slot})`, 'warning', b._id, 'banquet');
         b.reminderDays.push(daysAhead); await b.save(); reminders++;
       }
     }
+    res.json({ reminders });
+  } catch (e) { res.status(500).json({ message: e.message }); }
+});
 
-    // Payment-due alerts (daily from event date until paid)
-    const overdue = await BanquetBooking.find({ bookingDate: { $lte: new Date() }, paymentStatus: { $in:['due','partial'] }, status: { $ne:'cancelled' } });
+// Payment-due alerts — daily for events with pending/partial payment
+router.post('/run-alerts', protect, async (req, res) => {
+  try {
+    let paymentAlerts = 0;
+    const overdue = await BanquetBooking.find({ bookingDate:{$lte:new Date()}, paymentStatus:{$in:['due','partial']}, status:{$ne:'cancelled'} });
     const today = new Date().toISOString().slice(0, 10);
     for (const b of overdue) {
       const alreadyToday = b.paymentAlertDates?.some(d => d.toISOString().slice(0,10) === today);
       if (!alreadyToday) {
-        await Notif.notifyRoles(['banquet_manager','accounts_manager'], `🔴 Payment ${b.paymentStatus === 'partial' ? 'Partial' : 'Due'}`, `${b.bookingRef} — Balance ₹${b.balanceAmount} — ${b.customerName}`, 'alert', b._id, 'banquet');
+        await Notif.notifyRoles(['banquet_manager','accounts_manager'], `Payment ${b.paymentStatus === 'partial' ? 'Partial' : 'Due'}`, `${b.bookingRef} — Balance ₹${b.balanceAmount} — ${b.customerName}`, 'alert', b._id, 'banquet');
         b.paymentAlertDates = [...(b.paymentAlertDates || []), new Date()]; await b.save(); paymentAlerts++;
       }
     }
-    res.json({ reminders, paymentAlerts });
+    res.json({ paymentAlerts });
   } catch (e) { res.status(500).json({ message: e.message }); }
 });
 

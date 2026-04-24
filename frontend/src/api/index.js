@@ -97,8 +97,8 @@ export const banquetAPI = {
   calendar: (y,m) => api.get('/banquet/calendar/' + y + '/' + m),
   stats: () => api.get('/banquet/stats'),
   monthlyStats: () => api.get('/banquet/stats'),
-  runAlerts: () => api.post('/banquet/run-alerts'),
-  runReminders: () => api.post('/banquet/run-alerts'),
+  runAlerts:    () => api.post('/banquet/run-alerts'),
+  runReminders: () => api.post('/banquet/run-reminders'),
 };
 
 export const roomsAPI = {
