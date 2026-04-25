@@ -99,6 +99,7 @@ function AppRoutes() {
         <Route path="store/grc"              element={<Guard roles={[...STORE,...PROC]}><StorePage defaultTab="grc"/></Guard>}/>
         <Route path="store/requests"         element={<Guard roles={[...STORE,...SUPER]}><StorePage defaultTab="internal"/></Guard>}/>
         <Route path="store/tracking"         element={<Guard roles={[...STORE,...PROC]}><StorePage defaultTab="tracking"/></Guard>}/>
+        <Route path="store/assistants"       element={<Guard roles={['chairman','secretary','gm','agm','store_manager']}><StorePage defaultTab="assistants"/></Guard>}/>
         <Route path="kitchen/requests"       element={<Guard roles={KITCH}><KitchenPage/></Guard>}/>
         <Route path="kitchen/utilization"    element={<Guard roles={KITCH}><KitchenPage defaultTab="utilization"/></Guard>}/>
         <Route path="accounts/records"       element={<Guard roles={ACCT}><AccountsPage/></Guard>}/>

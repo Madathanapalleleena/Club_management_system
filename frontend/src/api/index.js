@@ -82,7 +82,7 @@ export const storeAPI = {
 
 export const kitchenAPI = {
   requests: p => api.get('/kitchen/requests', { params: p }),
-  create: d => api.post('/kitchen/requests', d),
+  createRequest: d => api.post('/kitchen/requests', d),
   utilization: p => api.get('/kitchen/utilization', { params: p }),
   returns: d => api.post('/kitchen/returns', d),
 };

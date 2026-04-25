@@ -11,8 +11,6 @@ const itemSchema = new mongoose.Schema({
   thresholdValue: { type: Number, default: 0, min: 0 },
   lastPurchased:  { type: Date },
   expiryDate:     { type: Date },
-  department:     { type: String },
-  location:       { type: String },
   isActive:       { type: Boolean, default: true },
   createdBy:      { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   lastUpdatedBy:  { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

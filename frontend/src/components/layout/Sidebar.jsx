@@ -10,7 +10,8 @@ const NAV = [
   { id:'procurement', label:'Procurement',  icon:ShoppingCart,      roles:['chairman','secretary','gm','agm','procurement_manager','procurement_assistant'],
     children:[{label:'Dashboard',path:'/procurement'},{label:'Requirements',path:'/procurement/requests'},{label:'Vendors',path:'/procurement/vendors'},{label:'Purchase Orders',path:'/procurement/orders'},{label:'Order Tracking',path:'/procurement/tracking'},{label:'Quality & GRC',path:'/procurement/quality'}] },
   { id:'store',       label:'Store',        icon:Package,           roles:['chairman','secretary','gm','agm','store_manager','store_assistant','procurement_manager'],
-    children:[{label:'Dashboard',path:'/store'},{label:'Inventory',path:'/store/inventory'},{label:'GRC',path:'/store/grc'},{label:'Internal Requests',path:'/store/requests'},{label:'Order Tracking',path:'/store/tracking'}] },
+    children:[{label:'Dashboard',path:'/store'},{label:'Inventory',path:'/store/inventory'},{label:'GRC',path:'/store/grc'},{label:'Internal Requests',path:'/store/requests'},{label:'Order Tracking',path:'/store/tracking'},{label:'Assistants',path:'/store/assistants',roles:['store_manager']}] },
+
   { id:'kitchen',     label:'Kitchen',      icon:UtensilsCrossed,   roles:['chairman','secretary','gm','agm','kitchen_manager','food_control'],
     children:[{label:'Dashboard',path:'/kitchen'},{label:'Requests',path:'/kitchen/requests'},{label:'Utilization',path:'/kitchen/utilization'}] },
   { id:'banquet',     label:'Banquet',      path:'/banquet',        icon:CalendarDays,    roles:['chairman','secretary','gm','agm','banquet_manager'] },
@@ -45,6 +46,8 @@ export default function Sidebar({ collapsed }) {
           const hasChildren = !collapsed && item.children;
           const isOpen = expanded[item.id];
           if (hasChildren) {
+            const visibleChildren = item.children.filter(c => !c.roles || c.roles.includes(user?.role || ''));
+            if (visibleChildren.length === 0) return null;
             return (
               <div key={item.id}>
                 <div onClick={() => toggle(item.id)} style={{ display:'flex',alignItems:'center',gap:10,padding:'8px 14px 8px 18px',margin:'1px 8px',borderRadius:'var(--r)',cursor:'pointer',color:'var(--text-2)',fontSize:'.875rem',fontWeight:500,transition:'all var(--t)',userSelect:'none' }}
@@ -55,8 +58,9 @@ export default function Sidebar({ collapsed }) {
                 </div>
                 {isOpen && (
                   <div style={{paddingLeft:28,paddingRight:8,paddingBottom:4}}>
-                    {item.children.map(c => (
+                    {visibleChildren.map(c => (
                       <NavLink key={c.path} to={c.path} end={c.path.split('/').length<=2}
+
                         style={({isActive})=>({display:'block',padding:'5px 14px',borderRadius:'var(--r)',marginBottom:2,color:isActive?color:'var(--text-3)',background:isActive?bg:'transparent',fontSize:'.8125rem',fontWeight:isActive?700:400,textDecoration:'none',transition:'all var(--t)',borderLeft:isActive?`2px solid ${color}`:'2px solid transparent'})}>
                         {c.label}
                       </NavLink>
