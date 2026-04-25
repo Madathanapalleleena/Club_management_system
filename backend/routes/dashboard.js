@@ -67,11 +67,29 @@ async function getStoreSummary() {
   const all = await Item.find({isActive:true});
   return { total:all.length, adequate:all.filter(i=>i.stockStatus==='adequate').length, low:all.filter(i=>i.stockStatus==='low').length, critical:all.filter(i=>i.stockStatus==='critical').length, outOfStock:all.filter(i=>i.stockStatus==='out_of_stock').length, expiringSoon:all.filter(i=>{if(!i.expiryDate)return false;const d=(new Date(i.expiryDate)-Date.now())/86400000;return d>0&&d<=50;}).length, totalValue:all.reduce((s,i)=>s+i.quantity*i.unitPrice,0) };
 }
+async function getDeptBreakdown() {
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
+  thirtyDaysAgo.setHours(0,0,0,0);
+  const [sales, expenses] = await Promise.all([
+    Sale.aggregate([{$match:{date:{$gte:thirtyDaysAgo}}},{$group:{_id:{department:'$department',category:'$category'},sales:{$sum:'$amount'}}}]),
+    Expense.aggregate([{$match:{date:{$gte:thirtyDaysAgo}}},{$group:{_id:{department:'$department',category:'$category'},expenses:{$sum:'$amount'}}}]),
+  ]);
+  const map = {};
+  sales.forEach(s => { const k=`${s._id.department}||${s._id.category}`; if(!map[k]) map[k]={department:s._id.department,category:s._id.category,sales:0,expenses:0}; map[k].sales=s.sales; });
+  expenses.forEach(e => { const k=`${e._id.department}||${e._id.category}`; if(!map[k]) map[k]={department:e._id.department,category:e._id.category,sales:0,expenses:0}; map[k].expenses=e.expenses; });
+  return Object.values(map).map(r=>({...r,profit:r.sales-r.expenses})).sort((a,b)=>b.sales-a.sales);
+}
 
 router.get('/chairman', protect, async (req, res) => {
   try {
-    const [directors,monthly,pnl,storeSummary,pendingReqs,pendingPOs] = await Promise.all([Director.find().populate('createdBy','name'),getMonthly(),getPnL(),getStoreSummary(),PReq.countDocuments({status:'pending'}),PO.countDocuments({orderStatus:{$in:['draft','approved']}}),]);
-    res.json({ directors, monthly, pnl, storeSummary, pendingReqs, pendingPOs });
+    const [directors,monthly,pnl,deptBreakdown,storeSummary,pendingReqs,pendingPOs] = await Promise.all([
+      Director.find().populate('createdBy','name'),
+      getMonthly(),getPnL(),getDeptBreakdown(),getStoreSummary(),
+      PReq.countDocuments({status:'pending'}),
+      PO.countDocuments({orderStatus:{$in:['draft','approved']}}),
+    ]);
+    res.json({ directors, monthly, pnl, deptBreakdown, storeSummary, pendingReqs, pendingPOs });
   } catch (e) { res.status(500).json({message:e.message}); }
 });
 
@@ -84,8 +102,19 @@ router.get('/gm', protect, async (req, res) => {
 
 router.get('/procurement', protect, async (req, res) => {
   try {
-    const [pending,approved,po_raised,vendorCount,grcPending,recentReqs,recentPOs] = await Promise.all([PReq.countDocuments({status:'pending'}),PReq.countDocuments({status:'approved'}),PReq.countDocuments({status:'po_raised'}),Vendor.countDocuments({isActive:true}),require('../models/StoreModels').GRC.countDocuments({status:'pending'}),PReq.find().sort('-createdAt').limit(8).populate('requestedBy','name department role').populate('approvedBy','name role').populate('rejectedBy','name role'),PO.find().sort('-createdAt').limit(8).populate('vendor','name shopName').populate('createdBy','name role').populate('approvedBy','name role').populate('paymentUpdatedBy','name role'),]);
-    res.json({ stats:{pending,approved,po_raised,vendorCount,grcPending}, recentReqs, recentPOs });
+    const { GRC } = require('../models/StoreModels');
+    const [pReqPending,pReqApproved,poPending,poDelivered,poPayPending,vendorCount,grcPending,recentReqs,recentPOs] = await Promise.all([
+      PReq.countDocuments({status:'pending'}),
+      PReq.countDocuments({status:'approved'}),
+      PO.countDocuments({orderStatus:{$in:['draft','approved','dispatched']}}),
+      PO.countDocuments({orderStatus:'delivered'}),
+      PO.countDocuments({paymentStatus:{$in:['pending','advance']}}),
+      Vendor.countDocuments({isActive:true}),
+      GRC.countDocuments({status:'pending'}),
+      PReq.find().sort('-createdAt').limit(8).populate('requestedBy','name department role').populate('approvedBy','name role').populate('rejectedBy','name role'),
+      PO.find().sort('-createdAt').limit(8).populate('vendor','name shopName').populate('createdBy','name role').populate('approvedBy','name role').populate('paymentUpdatedBy','name role'),
+    ]);
+    res.json({ stats:{pReqPending,pReqApproved,poPending,poDelivered,poPayPending,vendorCount,grcPending}, recentReqs, recentPOs });
   } catch (e) { res.status(500).json({message:e.message}); }
 });
 

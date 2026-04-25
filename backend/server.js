@@ -1,14 +1,14 @@
 require('dotenv').config();
-const express   = require('express');
-const cors      = require('cors');
-const helmet    = require('helmet');
-const morgan    = require('morgan');
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
-const path      = require('path');
-const fs        = require('fs');
+const path = require('path');
+const fs = require('fs');
 
 // Ensure upload dir exists
-['uploads','uploads/bills','uploads/grc','uploads/agreements'].forEach(d => fs.mkdirSync(d, { recursive: true }));
+['uploads', 'uploads/bills', 'uploads/grc', 'uploads/agreements'].forEach(d => fs.mkdirSync(d, { recursive: true }));
 
 require('./config/database')();
 const app = express();
@@ -22,17 +22,17 @@ app.use(express.urlencoded({ extended: true, limit: '30mb' }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Routes
-app.use('/api/auth',        require('./routes/auth'));
-app.use('/api/directors',   require('./routes/directors'));
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/directors', require('./routes/directors'));
 app.use('/api/procurement', require('./routes/procurement'));
-app.use('/api/store',       require('./routes/store'));
-app.use('/api/kitchen',     require('./routes/kitchen'));
-app.use('/api/banquet',     require('./routes/banquet'));
-app.use('/api/rooms',       require('./routes/rooms'));
-app.use('/api/finance',     require('./routes/finance'));
-app.use('/api/hr',          require('./routes/hr'));
+app.use('/api/store', require('./routes/store'));
+app.use('/api/kitchen', require('./routes/kitchen'));
+app.use('/api/banquet', require('./routes/banquet'));
+app.use('/api/rooms', require('./routes/rooms'));
+app.use('/api/finance', require('./routes/finance'));
+app.use('/api/hr', require('./routes/hr'));
 app.use('/api/notifications', require('./routes/notifications'));
-app.use('/api/dashboard',   require('./routes/dashboard'));
+app.use('/api/dashboard', require('./routes/dashboard'));
 
 app.get('/api/health', (_, res) => res.json({ ok: true, ts: new Date(), env: process.env.NODE_ENV }));
 
@@ -41,5 +41,5 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ message: err.message || 'Internal server error' });
 });
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀  API ready on http://localhost:${PORT}`));
+const PORT = process.env.PORT || 5001;
+app.listen(PORT, () => console.log(`  API ready on http://localhost:${PORT}`));

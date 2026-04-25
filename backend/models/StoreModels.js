@@ -11,17 +11,23 @@ const itemSchema = new mongoose.Schema({
   thresholdValue: { type: Number, default: 0, min: 0 },
   lastPurchased:  { type: Date },
   expiryDate:     { type: Date },
+  department:     { type: String },
+  location:       { type: String },
+  stockStatus:    { type: String, enum: ['adequate','low','critical','out_of_stock'], default: 'adequate' },
   isActive:       { type: Boolean, default: true },
   createdBy:      { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   lastUpdatedBy:  { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } });
 
-itemSchema.virtual('stockStatus').get(function () {
-  if (this.quantity === 0)                        return 'out_of_stock';
-  if (this.quantity <= this.thresholdValue * 0.5) return 'critical';
-  if (this.quantity <= this.thresholdValue)       return 'low';
-  return 'adequate';
+// Recalculate stockStatus on every save so it is queryable in aggregations
+itemSchema.pre('save', function (next) {
+  if (this.quantity === 0)                              this.stockStatus = 'out_of_stock';
+  else if (this.quantity <= this.thresholdValue * 0.5) this.stockStatus = 'critical';
+  else if (this.quantity <= this.thresholdValue)        this.stockStatus = 'low';
+  else                                                   this.stockStatus = 'adequate';
+  next();
 });
+
 itemSchema.virtual('stockPercent').get(function () {
   if (!this.thresholdValue) return 100;
   return Math.min(100, Math.round((this.quantity / this.thresholdValue) * 100));

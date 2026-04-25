@@ -10,7 +10,7 @@ export default function ChairmanDashboard() {
   const [loading, setLoad] = useState(true);
   useEffect(() => { dashAPI.chairman().then(r=>setData(r.data)).finally(()=>setLoad(false)); }, []);
   if (loading) return <LoadingPage text="Loading supervision dashboard..."/>;
-  const { directors=[], monthly=[], pnl=[], storeSummary={}, pendingReqs=0, pendingPOs=0 } = data;
+  const { directors=[], monthly=[], pnl=[], deptBreakdown=[], storeSummary={}, pendingReqs=0, pendingPOs=0 } = data;
   const rev  = monthly.reduce((s,m)=>s+m.sales,0);
   const exp  = monthly.reduce((s,m)=>s+m.expenses,0);
   const deptC = d => ({ food_committee:'#d97706', sports:'#15803d', rooms_banquets:'#1d4ed8', general:'#6b7280' }[d]||'#6b7280');
@@ -38,8 +38,8 @@ export default function ChairmanDashboard() {
               <XAxis dataKey="month" tick={{fill:'var(--text-3)',fontSize:11}} axisLine={false} tickLine={false}/>
               <YAxis tick={{fill:'var(--text-3)',fontSize:11}} axisLine={false} tickLine={false} tickFormatter={v=>'₹'+(v/1e5).toFixed(0)+'L'}/>
               <Tooltip content={<ChartTip/>}/><Legend wrapperStyle={{fontSize:'.8125rem'}}/>
-              <Bar dataKey="sales" name="Revenue" fill="#4f46e5" radius={[4,4,0,0]}/>
-              <Bar dataKey="expenses" name="Expenses" fill="#f59e0b" radius={[4,4,0,0]}/>
+              <Bar dataKey="sales" name="Revenue" fill="#1d4ed8" radius={[4,4,0,0]}/>
+              <Bar dataKey="expenses" name="Expenses" fill="#dc2626" radius={[4,4,0,0]}/>
             </BarChart>
           </ResponsiveContainer>
         </SectionCard>
@@ -50,11 +50,29 @@ export default function ChairmanDashboard() {
               <XAxis dataKey="month" tick={{fill:'var(--text-3)',fontSize:11}} axisLine={false} tickLine={false}/>
               <YAxis tick={{fill:'var(--text-3)',fontSize:11}} axisLine={false} tickLine={false} tickFormatter={v=>'₹'+(v/1e5).toFixed(0)+'L'}/>
               <Tooltip content={<ChartTip/>}/>
-              <Line dataKey="profit" name="Profit" stroke={(rev-exp)>=0?'#059669':'#dc2626'} strokeWidth={2.5} dot={{r:3}} activeDot={{r:5}}/>
+              <Line dataKey="profit" name="Profit" stroke="#16a34a" strokeWidth={2.5} dot={{r:3}} activeDot={{r:5}}/>
             </LineChart>
           </ResponsiveContainer>
         </SectionCard>
       </div>
+      {deptBreakdown.length > 0 && (
+        <SectionCard title="Department-wise Category Analytics (30 Days)" noPad>
+          <table>
+            <thead><tr><th>Department</th><th>Category</th><th>Revenue</th><th>Expenses</th><th>Profit / Loss</th></tr></thead>
+            <tbody>
+              {deptBreakdown.map((r,i) => (
+                <tr key={i}>
+                  <td style={{fontWeight:600,textTransform:'capitalize'}}>{deptLabel(r.department)}</td>
+                  <td style={{textTransform:'capitalize',color:'var(--text-3)'}}>{r.category}</td>
+                  <td style={{color:'#1d4ed8',fontWeight:600}}>{fmt.inr(r.sales)}</td>
+                  <td style={{color:'#dc2626',fontWeight:600}}>{fmt.inr(r.expenses)}</td>
+                  <td style={{fontWeight:800,color:r.profit>=0?'#16a34a':'#dc2626'}}>{r.profit>=0?'+':''}{fmt.inr(r.profit)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </SectionCard>
+      )}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
         <SectionCard title="Department P&L" noPad>
           <table>
