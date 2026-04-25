@@ -83,13 +83,13 @@ function SalesTab() {
   const [sales, setSales] = useState([]);
   const [modal, setModal] = useState(false);
   const [loading, setLoad]= useState(true);
-  const [form, setForm]   = useState({ department:'restaurant',category:'restaurant',date:new Date().toISOString().slice(0,10),amount:'',description:'',paymentMode:'cash',invoiceNumber:'' });
+  const [form, setForm]   = useState({ department:'restaurant',category:'',date:new Date().toISOString().slice(0,10),amount:'',description:'',paymentMode:'cash',invoiceNumber:'' });
 
   const load = () => { setLoad(true); finAPI.sales().then(r=>setSales(r.data)).finally(()=>setLoad(false)); };
   useEffect(()=>{load();},[]);
 
   const save = async () => {
-    if(!form.amount||!form.date) return toast.error('Fill required fields');
+    if(!form.amount||!form.date||!form.category) return toast.error('Fill required fields');
     try { await finAPI.createSale(form); toast.success('Sale recorded'); load(); setModal(false); }
     catch(e) { toast.error('Failed'); }
   };
@@ -128,12 +128,16 @@ function SalesTab() {
       >
         <div className="form-row cols-2">
           <FG label="Department" required>
-            <select value={form.department} onChange={e=>setForm({...form,department:e.target.value,category:e.target.value})}>
+            <select value={form.department} onChange={e=>setForm({...form,department:e.target.value,category:''})}>
               {DEPTS.map(d=><option key={d} value={d}>{d.charAt(0).toUpperCase()+d.slice(1)}</option>)}
             </select>
           </FG>
-          <FG label="Date" required><input type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})} /></FG>
+          <FG label="Category / Source" required>
+            <input value={form.category} onChange={e=>setForm({...form,category:e.target.value})}
+              placeholder={form.department==='restaurant'?'e.g. Lunch, Dinner, Events':form.department==='bar'?'e.g. Liquor, Beverages':'e.g. Hall Booking, Events'} />
+          </FG>
         </div>
+        <FG label="Date" required><input type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})} /></FG>
         <div className="form-row cols-2">
           <FG label="Amount (₹)" required><input type="number" value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})} placeholder="0.00" /></FG>
           <FG label="Payment Mode">

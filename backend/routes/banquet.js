@@ -1,5 +1,6 @@
 const router = require('express').Router();
 const BanquetBooking = require('../models/BanquetBooking');
+const { Sale } = require('../models/Finance');
 const Notif = require('../models/Notification');
 const User  = require('../models/User');
 const { protect } = require('../middleware/auth');
@@ -153,6 +154,19 @@ router.put('/:id', protect, async (req, res) => {
     } else if (action === 'complete') {
       booking.status = 'completed';
       log.action = 'completed'; log.note = `Event completed by ${req.user.name}`;
+      const existingSale = await Sale.findOne({ invoiceNumber: booking.bookingRef });
+      if (!existingSale) {
+        await Sale.create({
+          department:    'banquet',
+          category:      booking.eventType || 'Event Booking',
+          date:          new Date(),
+          amount:        booking.totalAmount,
+          description:   `${booking.bookingRef} — ${booking.eventType} for ${booking.customerName} (${booking.numberOfPersons} persons)`,
+          invoiceNumber: booking.bookingRef,
+          paymentMode:   booking.paymentMode || 'cash',
+          recordedBy:    req.user._id,
+        });
+      }
     } else if (action === 'cancel') {
       booking.status = 'cancelled';
       log.action = 'cancelled'; log.note = note || `Cancelled by ${req.user.name}`;

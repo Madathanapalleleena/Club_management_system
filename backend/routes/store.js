@@ -31,7 +31,7 @@ router.get('/items', protect, async (req, res) => {
     if (req.query.type) f.itemType = req.query.type;
     if (req.query.department) f.department = req.query.department;
     if (req.query.search) f.name = { $regex: req.query.search, $options: 'i' };
-    if (req.query.lowStock === 'true') { const all = await Item.find({ isActive: true }); return res.json(all.filter(i => ['low','critical','out_of_stock'].includes(i.stockStatus))); }
+    if (req.query.lowStock === 'true') { return res.json(await Item.find({ isActive: true, stockStatus: { $in: ['low','critical','out_of_stock'] } }).sort('quantity')); }
     if (req.query.expiringSoon === 'true') { f.expiryDate = { $lte: new Date(Date.now() + 50*86400000), $gte: new Date() }; }
     res.json(await Item.find(f).populate('createdBy','name').populate('lastUpdatedBy','name').sort('name'));
   } catch (e) { res.status(500).json({ message: e.message }); }

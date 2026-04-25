@@ -1,11 +1,26 @@
 const router = require('express').Router();
 const { Room, RoomBooking } = require('../models/RoomModels');
+const { Sale } = require('../models/Finance');
 const Notif = require('../models/Notification');
 const { protect } = require('../middleware/auth');
+
+// Auto-marks bookings as no_show if check-in date passed with no action (4hr grace)
+async function cleanStaleReservations() {
+  const grace = new Date(Date.now() - 4 * 3600000);
+  const stale = await RoomBooking.find({ status: 'confirmed', checkIn: { $lt: grace } }).select('_id room');
+  await Promise.all(stale.map(async b => {
+    await RoomBooking.findByIdAndUpdate(b._id, {
+      status: 'no_show',
+      $push: { changeLog: { action: 'no_show', note: 'Auto-marked: check-in passed without check-in action', performedAt: new Date() } },
+    });
+    await Room.findOneAndUpdate({ _id: b.room, status: 'reserved' }, { status: 'available' });
+  }));
+}
 
 // ── ROOM MANAGEMENT ───────────────────────────────────────────────
 router.get('/rooms', protect, async (req, res) => {
   try {
+    await cleanStaleReservations();
     const f = {};
     if (req.query.status)   f.status   = req.query.status;
     if (req.query.roomType) f.roomType = req.query.roomType;
@@ -146,7 +161,20 @@ router.put('/bookings/:id', protect, async (req, res) => {
       log.action = 'checked_out'; log.note = `Checked out by ${req.user.name}`;
       const room = await Room.findById(booking.room);
       if (room) { room.status = 'available'; await room.save(); }
-      await Notif.notifyRoles(['rooms_manager','gm'], '🏁 Check-Out', `${booking.bookingRef} — ${booking.customerName} checked out from ${booking.roomNumber}`, 'info', booking._id, 'rooms');
+      await Notif.notifyRoles(['rooms_manager','gm'], 'Check-Out', `${booking.bookingRef} — ${booking.customerName} checked out from ${booking.roomNumber}`, 'info', booking._id, 'rooms');
+      const existingSale = await Sale.findOne({ invoiceNumber: booking.bookingRef });
+      if (!existingSale) {
+        await Sale.create({
+          department: 'rooms',
+          category:   'Room Booking',
+          date:        new Date(),
+          amount:      booking.totalAmount,
+          description: `${booking.bookingRef} — ${booking.customerName} (${booking.numberOfNights} night${booking.numberOfNights > 1 ? 's' : ''})`,
+          invoiceNumber: booking.bookingRef,
+          paymentMode:   booking.paymentMode || 'cash',
+          recordedBy:    req.user._id,
+        });
+      }
     } else if (action === 'cancel') {
       booking.status = 'cancelled';
       log.action = 'cancelled'; log.note = note || `Cancelled by ${req.user.name}`;
@@ -175,6 +203,7 @@ router.put('/bookings/:id', protect, async (req, res) => {
 // Dashboard stats — 6.2
 router.get('/stats', protect, async (req, res) => {
   try {
+    await cleanStaleReservations();
     const now    = new Date();
     const today  = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0,  0,  0);
     const todayE = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);

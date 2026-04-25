@@ -6,7 +6,7 @@ import { Modal, FG, PageHdr, Empty, Stat } from '../../ui';
 import toast from 'react-hot-toast';
 
 const DEPTS = ['food_committee','sports','rooms_banquets','general'];
-const EMPTY = { committeeName:'', name:'', department:'food_committee', mobile:'', email:'', memberId:'', notes:'' };
+const EMPTY = { committeeName:'', name:'', department:'food_committee', mobile:'', email:'', memberId:'', dateOfCreation: new Date().toISOString().slice(0,10), notes:'' };
 
 const deptColor = d => ({ food_committee:'var(--amber)', sports:'var(--emerald)', rooms_banquets:'var(--sky)', general:'var(--text-3)' }[d] || 'var(--text-3)');
 const deptBg    = d => ({ food_committee:'var(--amber-lt)', sports:'var(--emerald-lt)', rooms_banquets:'var(--sky-lt)', general:'var(--bg-subtle)' }[d] || 'var(--bg-subtle)');
@@ -165,7 +165,10 @@ export default function Directors() {
           </FG>
           <FG label="Mobile" required><input value={form.mobile} onChange={e=>setForm({...form,mobile:e.target.value})} placeholder="9876543210" /></FG>
         </div>
-        <FG label="Email"><input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="director@club.com" /></FG>
+        <div className="form-row cols-2">
+          <FG label="Email"><input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="director@club.com" /></FG>
+          <FG label="Date of Creation" required><input type="date" value={form.dateOfCreation} onChange={e=>setForm({...form,dateOfCreation:e.target.value})} /></FG>
+        </div>
         <FG label="Notes"><textarea value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} placeholder="Optional notes…" style={{minHeight:60}} /></FG>
       </Modal>
     </div>

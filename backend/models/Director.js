@@ -6,7 +6,7 @@ const schema = new mongoose.Schema({
   mobile:         { type: String, required: true },
   email:          { type: String, lowercase: true, trim: true },
   memberId:       { type: String, required: true, unique: true },
-  dateOfCreation: { type: Date, default: Date.now },
+  dateOfCreation: { type: Date, default: Date.now, required: true },
   isActive:       { type: Boolean, default: true },
   notes:          { type: String },
   createdBy:      { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
