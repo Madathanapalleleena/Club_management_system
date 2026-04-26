@@ -33,6 +33,7 @@ app.use('/api/finance', require('./routes/finance'));
 app.use('/api/hr', require('./routes/hr'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/dashboard', require('./routes/dashboard'));
+app.use('/api/settings', require('./routes/settings').router);
 
 app.get('/api/health', (_, res) => res.json({ ok: true, ts: new Date(), env: process.env.NODE_ENV }));
 

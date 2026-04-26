@@ -4,7 +4,7 @@ import {
   FileText, Upload, Edit2, TrendingUp, Package, Users,
   MessageSquare, AlertTriangle, Clock, CheckCircle, RefreshCw
 } from 'lucide-react';
-import { procAPI, authAPI } from '../../../api';
+import { procAPI, authAPI, storeAPI } from '../../../api';
 import { fmt, reqBadge, priBadge, orderBadge, payBadge } from '../../../utils/helpers';
 import { Modal, FG, PageHdr, Empty, Tabs, ChangeLog } from '../../ui';
 import toast from 'react-hot-toast';
@@ -757,16 +757,18 @@ Available placeholders:
 // SECTION 3 – PURCHASE ORDERS
 // ────────────────────────────────────────────────────────────────────
 function PurchaseOrdersTab() {
-  const [orders,   setOrders]   = useState([]);
-  const [vendors,  setVendors]  = useState([]);
-  const [loading,  setLoad]     = useState(true);
-  const [filters,  setF]        = useState({orderStatus:'',dept:'',paymentStatus:''});
-  const [search,   setSearch]   = useState('');
-  const [modal,    setModal]    = useState(false);
-  const [detail,   setDetail]   = useState(null);
-  const [payModal, setPayModal] = useState(null);
-  const [payForm,  setPayForm]  = useState({paymentStatus:'pending',advanceAmount:''});
-  const [form, setForm] = useState({department:'kitchen',vendor:'',expectedDelivery:'',items:[{itemName:'',category:'',quantity:'',unit:'kg',unitPrice:''}]});
+  const [orders,     setOrders]   = useState([]);
+  const [vendors,    setVendors]  = useState([]);
+  const [storeItems, setStoreItems] = useState([]);
+  const [loading,    setLoad]     = useState(true);
+  const [filters,    setF]        = useState({orderStatus:'',dept:'',paymentStatus:''});
+  const [search,     setSearch]   = useState('');
+  const [modal,      setModal]    = useState(false);
+  const [detail,     setDetail]   = useState(null);
+  const [payModal,   setPayModal] = useState(null);
+  const [payForm,    setPayForm]  = useState({paymentStatus:'pending',advanceAmount:''});
+  const [itemSearch, setItemSearch] = useState([]);
+  const [form, setForm] = useState({department:'kitchen',vendor:'',expectedDelivery:'',notes:'',items:[{itemId:'',itemName:'',category:'',quantity:'',unit:'kg',unitPrice:''}]});
 
   const load = useCallback(()=>{
     setLoad(true);
@@ -774,23 +776,40 @@ function PurchaseOrdersTab() {
     if(filters.orderStatus)   p.orderStatus   = filters.orderStatus;
     if(filters.dept)          p.department    = filters.dept;
     if(filters.paymentStatus) p.paymentStatus = filters.paymentStatus;
-    Promise.all([procAPI.pos(p),procAPI.vendors()])
-      .then(([o,v])=>{setOrders(o.data);setVendors(v.data);}).finally(()=>setLoad(false));
+    Promise.all([procAPI.pos(p), procAPI.vendors(), storeAPI.items({isActive:true})])
+      .then(([o,v,si])=>{setOrders(o.data);setVendors(v.data);setStoreItems(si.data);}).finally(()=>setLoad(false));
   },[filters]);
   useEffect(()=>{load();},[load]);
 
-  const addRow    = ()=>setForm(f=>({...f,items:[...f.items,{itemName:'',category:'',quantity:'',unit:'kg',unitPrice:''}]}));
-  const removeRow = i=>setForm(f=>({...f,items:f.items.filter((_,x)=>x!==i)}));
-  const setItem   = (i,k,v)=>setForm(f=>({...f,items:f.items.map((it,x)=>{
-    if(x!==i)return it;
+  const addRow = ()=>{
+    setForm(f=>({...f,items:[...f.items,{itemId:'',itemName:'',category:'',quantity:'',unit:'kg',unitPrice:''}]}));
+    setItemSearch(s=>[...s,'']);
+  };
+  const removeRow = i=>{
+    setForm(f=>({...f,items:f.items.filter((_,x)=>x!==i)}));
+    setItemSearch(s=>s.filter((_,x)=>x!==i));
+  };
+  const setItem = (i,k,v)=>setForm(f=>({...f,items:f.items.map((it,x)=>{
+    if(x!==i) return it;
     const u={...it,[k]:v}; u.totalPrice=parseFloat(u.quantity||0)*parseFloat(u.unitPrice||0); return u;
   })}));
+
+  // When user selects a store item from dropdown, auto-fill row
+  const selectStoreItem = (rowIdx, storeItemId)=>{
+    const si = storeItems.find(s=>s._id===storeItemId);
+    if(!si) { setItem(rowIdx,'itemId',''); setItem(rowIdx,'itemName',''); return; }
+    setForm(f=>({...f,items:f.items.map((it,x)=>{
+      if(x!==rowIdx) return it;
+      return {...it, itemId:si._id, itemName:si.name, category:si.category||'', unit:si.unit||'kg', unitPrice:si.unitPrice||0, totalPrice:parseFloat(it.quantity||0)*(si.unitPrice||0)};
+    })}));
+  };
+
   const total = form.items.reduce((s,i)=>s+(parseFloat(i.quantity||0)*parseFloat(i.unitPrice||0)),0);
 
   const savePO = async ()=>{
     if(!form.vendor) return toast.error('Select a vendor');
     if(!form.items[0].itemName) return toast.error('Add at least one item');
-    try { await procAPI.createPO({...form,totalAmount:total}); toast.success('Purchase Order created'); load(); setModal(false); }
+    try { await procAPI.createPO({...form,totalAmount:total}); toast.success('Purchase Order created'); load(); setModal(false); setItemSearch([]); }
     catch(e){ toast.error(e.response?.data?.message||'Failed'); }
   };
 
@@ -960,20 +979,48 @@ function PurchaseOrdersTab() {
               <button className="btn btn-subtle btn-sm" onClick={addRow}><Plus size={12}/>Add Row</button>
             </div>
           </div>
-          <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 0.8fr 0.7fr 1fr 1fr 28px',gap:6,marginBottom:4}}>
-            {['Item Name','Category','Qty','Unit','Unit Price ₹','Total',''].map(h=><div key={h} style={{fontSize:'.72rem',fontWeight:700,color:'var(--text-4)',textTransform:'uppercase',letterSpacing:'.04em'}}>{h}</div>)}
+          <div style={{display:'grid',gridTemplateColumns:'2.5fr 1.2fr 0.8fr 0.7fr 1fr 1fr 28px',gap:6,marginBottom:4}}>
+            {['Item (from Store)','Category','Qty','Unit','Unit Price ₹','Total',''].map(h=><div key={h} style={{fontSize:'.72rem',fontWeight:700,color:'var(--text-4)',textTransform:'uppercase',letterSpacing:'.04em'}}>{h}</div>)}
           </div>
-          {form.items.map((it,i)=>(
-            <div key={i} style={{display:'grid',gridTemplateColumns:'2fr 1fr 0.8fr 0.7fr 1fr 1fr 28px',gap:6,marginBottom:6,alignItems:'center'}}>
-              <input placeholder="Item name *" value={it.itemName} onChange={e=>setItem(i,'itemName',e.target.value)}/>
-              <input placeholder="Category" value={it.category} onChange={e=>setItem(i,'category',e.target.value)}/>
-              <input placeholder="Qty" type="number" value={it.quantity} onChange={e=>setItem(i,'quantity',e.target.value)}/>
-              <select value={it.unit} onChange={e=>setItem(i,'unit',e.target.value)}>{UNITS.map(u=><option key={u} value={u}>{u}</option>)}</select>
-              <input placeholder="₹ unit price" type="number" value={it.unitPrice} onChange={e=>setItem(i,'unitPrice',e.target.value)}/>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'flex-end',fontWeight:700,fontSize:'.875rem',color:'var(--indigo)'}}>{fmt.inr(it.totalPrice||0)}</div>
-              <button className="btn btn-icon btn-ghost btn-sm" onClick={()=>removeRow(i)} disabled={form.items.length===1}><Trash2 size={12} style={{color:'var(--red)'}}/></button>
-            </div>
-          ))}
+          {form.items.map((it,i)=>{
+            const search = itemSearch[i]||'';
+            const filtered = storeItems.filter(s=>s.name.toLowerCase().includes(search.toLowerCase())||s.category?.toLowerCase().includes(search.toLowerCase()));
+            return (
+              <div key={i} style={{display:'grid',gridTemplateColumns:'2.5fr 1.2fr 0.8fr 0.7fr 1fr 1fr 28px',gap:6,marginBottom:8,alignItems:'start'}}>
+                <div style={{position:'relative'}}>
+                  <input
+                    placeholder="Search store item…"
+                    value={it.itemId ? it.itemName : (itemSearch[i]||'')}
+                    onChange={e=>{
+                      const v=e.target.value;
+                      setItemSearch(s=>{const n=[...s];n[i]=v;return n;});
+                      if(it.itemId) setItem(i,'itemId','');
+                    }}
+                    style={{width:'100%',borderColor:it.itemId?'var(--emerald)':undefined}}
+                  />
+                  {!it.itemId && search && filtered.length>0 && (
+                    <div style={{position:'absolute',top:'100%',left:0,right:0,zIndex:99,background:'var(--white)',border:'1.5px solid var(--border)',borderRadius:'var(--radius)',boxShadow:'0 4px 16px rgba(0,0,0,.12)',maxHeight:180,overflowY:'auto'}}>
+                      {filtered.slice(0,10).map(si=>(
+                        <div key={si._id} onClick={()=>{selectStoreItem(i,si._id);setItemSearch(s=>{const n=[...s];n[i]='';return n;});}}
+                          style={{padding:'7px 12px',cursor:'pointer',fontSize:'.8125rem',borderBottom:'1px solid var(--border)'}}
+                          onMouseEnter={e=>e.target.style.background='var(--bg-2)'} onMouseLeave={e=>e.target.style.background=''}>
+                          <span style={{fontWeight:600}}>{si.name}</span>
+                          <span style={{color:'var(--text-3)',fontSize:'.75rem',marginLeft:8}}>{si.category} · {si.quantity}{si.unit} in stock</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {it.itemId && <div style={{fontSize:'.7rem',color:'var(--emerald)',marginTop:2}}>✓ Linked to store</div>}
+                </div>
+                <input placeholder="Category" value={it.category} onChange={e=>setItem(i,'category',e.target.value)} style={{color:'var(--text-3)'}}/>
+                <input placeholder="Qty" type="number" min="0" value={it.quantity} onChange={e=>setItem(i,'quantity',e.target.value)}/>
+                <select value={it.unit} onChange={e=>setItem(i,'unit',e.target.value)}>{UNITS.map(u=><option key={u} value={u}>{u}</option>)}</select>
+                <input placeholder="₹ price" type="number" min="0" value={it.unitPrice} onChange={e=>setItem(i,'unitPrice',e.target.value)}/>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'flex-end',fontWeight:700,fontSize:'.875rem',color:'var(--indigo)',paddingTop:8}}>{fmt.inr(it.totalPrice||0)}</div>
+                <button className="btn btn-icon btn-ghost btn-sm" style={{marginTop:4}} onClick={()=>removeRow(i)} disabled={form.items.length===1}><Trash2 size={12} style={{color:'var(--red)'}}/></button>
+              </div>
+            );
+          })}
         </div>
       </Modal>
     </div>
@@ -1087,18 +1134,49 @@ function QualityTab() {
   const [modal,   setModal]  = useState(false);
   const [billModal,setBM]    = useState(null);
   const billRef              = useRef();
-  const [form, setForm]      = useState({linkedPO:'',poNumber:'',items:[{itemName:'',orderedQty:'',receivedQty:'',missingQty:0,mismatchNotes:''}],notes:''});
+  const [form, setForm] = useState({linkedPO:'',poNumber:'',items:[],notes:''});
 
-  const load = ()=>{ setLoad(true); Promise.all([procAPI.grc(),procAPI.pos({orderStatus:'dispatched'})]).then(([g,p])=>{setGrcs(g.data);setPOs(p.data);}).finally(()=>setLoad(false)); };
+  const load = ()=>{
+    setLoad(true);
+    Promise.all([
+      procAPI.grc(),
+      procAPI.pos({ orderStatus: 'approved' }),
+      procAPI.pos({ orderStatus: 'dispatched' }),
+    ]).then(([g,pa,pd])=>{
+      setGrcs(g.data);
+      // Merge approved + dispatched, deduplicate, exclude already GRC'd
+      const grcPOIds = new Set(g.data.map(gr=>gr.linkedPO?.toString()).filter(Boolean));
+      const all = [...pa.data, ...pd.data];
+      const seen = new Set();
+      setPOs(all.filter(p=>{ if(seen.has(p._id)||grcPOIds.has(p._id.toString())) return false; seen.add(p._id); return true; }));
+    }).finally(()=>setLoad(false));
+  };
   useEffect(()=>{load();},[]);
 
-  const addRow = ()=>setForm(f=>({...f,items:[...f.items,{itemName:'',orderedQty:'',receivedQty:'',missingQty:0,mismatchNotes:''}]}));
-  const setRow = (i,k,v)=>setForm(f=>({...f,items:f.items.map((it,x)=>x===i?{...it,[k]:v,missingQty:k==='receivedQty'?Math.max(0,(parseFloat(it.orderedQty||0)-parseFloat(v||0))):it.missingQty}:it)}));
+  const setRow = (i,k,v)=>setForm(f=>({...f,items:f.items.map((it,x)=>{
+    if(x!==i) return it;
+    const u={...it,[k]:v};
+    if(k==='receivedQty') u.missingQty=Math.max(0,(parseFloat(it.orderedQty||0)-parseFloat(v||0)));
+    return u;
+  })}));
 
   const selectPO = poId=>{
-    if(!poId){setForm(f=>({...f,linkedPO:'',poNumber:'',items:[{itemName:'',orderedQty:'',receivedQty:'',missingQty:0,mismatchNotes:''}]}));return;}
-    const po=pos.find(p=>p._id===poId);
-    if(po) setForm(f=>({...f,linkedPO:poId,poNumber:po.poNumber,items:po.items.map(it=>({itemName:it.itemName,orderedQty:it.quantity,receivedQty:'',missingQty:0,mismatchNotes:''}))}));
+    if(!poId){ setForm({linkedPO:'',poNumber:'',items:[],notes:''}); return; }
+    const po = pos.find(p=>p._id===poId);
+    if(po) setForm(f=>({...f,
+      linkedPO: poId,
+      poNumber: po.poNumber,
+      items: po.items.map(it=>({
+        itemId:       it.itemId || null,
+        itemName:     it.itemName,
+        orderedQty:   it.quantity,
+        receivedQty:  '',
+        missingQty:   0,
+        mismatchNotes:'',
+        unit:         it.unit,
+        unitPrice:    it.unitPrice,
+      })),
+    }));
   };
 
   const save = async ()=>{
@@ -1191,33 +1269,55 @@ function QualityTab() {
       {/* GRC Upload Modal */}
       <Modal open={modal} onClose={()=>setModal(false)} title="Upload GRC — Goods Received Copy" size="modal-xl"
         footer={<><button className="btn btn-ghost btn-sm" onClick={()=>setModal(false)}>Cancel</button><button className="btn btn-primary btn-sm" onClick={save}>Upload GRC</button></>}>
-        <FG label="Link to Purchase Order (auto-fills items)">
+        <FG label="Select Purchase Order" required>
           <select value={form.linkedPO} onChange={e=>selectPO(e.target.value)}>
-            <option value="">Select dispatched PO (optional)…</option>
-            {pos.map(p=><option key={p._id} value={p._id}>{p.poNumber} — {cap(p.department)} — {p.items?.length} items</option>)}
+            <option value="">Select PO to receive goods for…</option>
+            {pos.map(p=><option key={p._id} value={p._id}>{p.poNumber} — {cap(p.department)} — {p.items?.length} items — {p.vendor?.shopName||'—'} [{p.orderStatus}]</option>)}
           </select>
         </FG>
-        {!form.linkedPO&&<FG label="PO Number (manual)"><input value={form.poNumber} onChange={e=>setForm({...form,poNumber:e.target.value})} placeholder="e.g. PO-NO-Kit001/04/26"/></FG>}
-        <div>
-          <div className="flex items-center justify-between" style={{marginBottom:8}}>
-            <label style={{fontSize:'.8125rem',fontWeight:700,color:'var(--text-2)'}}>Items Verification</label>
-            <button className="btn btn-subtle btn-sm" onClick={addRow}><Plus size={12}/>Add Row</button>
-          </div>
-          <div style={{display:'grid',gridTemplateColumns:'2fr 0.8fr 0.8fr 0.7fr 2fr',gap:6,marginBottom:4}}>
-            {['Item Name','Ordered Qty','Received Qty','Missing','Mismatch Notes'].map(h=><div key={h} style={{fontSize:'.72rem',fontWeight:700,color:'var(--text-4)',textTransform:'uppercase',letterSpacing:'.04em'}}>{h}</div>)}
-          </div>
-          {form.items.map((it,i)=>(
-            <div key={i} style={{display:'grid',gridTemplateColumns:'2fr 0.8fr 0.8fr 0.7fr 2fr',gap:6,marginBottom:6,alignItems:'center'}}>
-              <input placeholder="Item name" value={it.itemName} onChange={e=>setRow(i,'itemName',e.target.value)}/>
-              <input placeholder="Ordered" type="number" value={it.orderedQty} onChange={e=>setRow(i,'orderedQty',e.target.value)}/>
-              <input placeholder="Received" type="number" value={it.receivedQty} onChange={e=>setRow(i,'receivedQty',e.target.value)}/>
-              <input value={it.missingQty} readOnly style={{background:'var(--bg-subtle)',color:it.missingQty>0?'var(--red)':'var(--text-3)',fontWeight:700}}/>
-              <input placeholder="Quality notes…" value={it.mismatchNotes} onChange={e=>setRow(i,'mismatchNotes',e.target.value)}/>
+
+        {form.linkedPO && form.items.length > 0 && (
+          <div>
+            <div style={{marginBottom:8}}>
+              <label style={{fontSize:'.8125rem',fontWeight:700,color:'var(--text-2)'}}>Items Received</label>
+              <span style={{fontSize:'.75rem',color:'var(--text-4)',marginLeft:8}}>Item name & ordered qty are from the PO — enter what you received</span>
             </div>
-          ))}
-        </div>
-        <FG label="Overall Notes"><textarea value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} style={{minHeight:50}} placeholder="General remarks…"/></FG>
-        <div style={{padding:'8px 12px',background:'var(--indigo-lt)',borderRadius:'var(--radius)',fontSize:'.8125rem',color:'var(--indigo)'}}>ℹ️ After upload: Store → Accounts → Procurement → HOD must each verify.</div>
+            <div style={{display:'grid',gridTemplateColumns:'2fr 0.8fr 0.8fr 0.7fr 0.6fr 2fr',gap:6,marginBottom:4}}>
+              {['Item','Ordered','Received','Missing','Unit','Notes'].map(h=>(
+                <div key={h} style={{fontSize:'.72rem',fontWeight:700,color:'var(--text-4)',textTransform:'uppercase',letterSpacing:'.04em'}}>{h}</div>
+              ))}
+            </div>
+            {form.items.map((it,i)=>(
+              <div key={i} style={{display:'grid',gridTemplateColumns:'2fr 0.8fr 0.8fr 0.7fr 0.6fr 2fr',gap:6,marginBottom:6,alignItems:'center'}}>
+                <div style={{padding:'6px 10px',background:'var(--bg-2)',borderRadius:'var(--radius)',fontSize:'.8125rem',fontWeight:600,border:'1.5px solid var(--border)'}}>
+                  {it.itemName}
+                  {it.itemId && <span style={{fontSize:'.65rem',color:'var(--emerald)',display:'block'}}>✓ linked to store</span>}
+                </div>
+                <div style={{padding:'6px 10px',background:'var(--bg-2)',borderRadius:'var(--radius)',fontSize:'.875rem',fontWeight:700,color:'var(--indigo)',border:'1.5px solid var(--border)',textAlign:'center'}}>
+                  {it.orderedQty}
+                </div>
+                <input placeholder="Received" type="number" min="0" value={it.receivedQty}
+                  onChange={e=>setRow(i,'receivedQty',e.target.value)}
+                  style={{borderColor: it.receivedQty&&parseFloat(it.receivedQty)<parseFloat(it.orderedQty)?'var(--amber)':'var(--emerald)'}}/>
+                <div style={{padding:'6px 8px',borderRadius:'var(--radius)',fontSize:'.875rem',fontWeight:800,textAlign:'center',
+                  background: it.missingQty>0?'var(--red-lt)':'var(--emerald-lt)',
+                  color: it.missingQty>0?'var(--red)':'var(--emerald)',
+                  border:'1.5px solid '+(it.missingQty>0?'var(--red)':'var(--emerald)')}}>
+                  {it.missingQty||0}
+                </div>
+                <div style={{padding:'6px 8px',background:'var(--bg-2)',borderRadius:'var(--radius)',fontSize:'.8rem',color:'var(--text-3)',border:'1.5px solid var(--border)',textAlign:'center'}}>
+                  {it.unit||'—'}
+                </div>
+                <input placeholder="Quality notes, damage…" value={it.mismatchNotes} onChange={e=>setRow(i,'mismatchNotes',e.target.value)}/>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!form.linkedPO && <div style={{padding:20,textAlign:'center',color:'var(--text-4)',fontSize:'.875rem',background:'var(--bg-2)',borderRadius:'var(--radius)'}}>Select a PO above to auto-fill items</div>}
+
+        <FG label="Overall Notes"><textarea value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} style={{minHeight:50}} placeholder="General delivery remarks…"/></FG>
+        <div style={{padding:'8px 12px',background:'var(--emerald-lt)',borderRadius:'var(--radius)',fontSize:'.8125rem',color:'var(--emerald)'}}>✓ Inventory updates automatically when you submit. Accounts will be notified for payment.</div>
       </Modal>
     </div>
   );

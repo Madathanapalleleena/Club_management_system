@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { dashAPI } from '../../../api';
+import { dashAPI, procAPI } from '../../../api';
 import { fmt, orderBadge, reqBadge, stockBadge } from '../../../utils/helpers';
-import { Stat, LoadingPage, SectionCard } from '../../ui';
-import { ShoppingCart, Package, Clock, CheckCircle, AlertTriangle, AlertCircle, Users, TrendingUp, TrendingDown, Calculator } from 'lucide-react';
+import { Stat, LoadingPage, SectionCard, Modal, FG } from '../../ui';
+import { ShoppingCart, Package, Clock, CheckCircle, AlertTriangle, AlertCircle, Users, TrendingUp, TrendingDown, Calculator, CreditCard } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { ChartTip } from '../../ui';
+import toast from 'react-hot-toast';
 
 export function ProcurementDashboard() {
   const [data, setData] = useState(null);
@@ -107,10 +108,31 @@ export function KitchenDashboard() {
   );
 }
 
+const PAY_STATUSES = ['pending','advance','paid','stopped'];
+
 export function AccountsDashboard() {
-  const [data, setData] = useState(null);
-  const [loading, setLoad] = useState(true);
-  useEffect(() => { dashAPI.accounts().then(r=>setData(r.data)).finally(()=>setLoad(false)); }, []);
+  const [data, setData]       = useState(null);
+  const [loading, setLoad]    = useState(true);
+  const [payModal, setPayModal] = useState(null);
+  const [payForm, setPayForm] = useState({ paymentStatus:'pending', advanceAmount:'', paymentMode:'cash' });
+
+  const load = () => { setLoad(true); dashAPI.accounts().then(r=>setData(r.data)).finally(()=>setLoad(false)); };
+  useEffect(() => { load(); }, []);
+
+  const openPay = po => {
+    setPayModal(po);
+    setPayForm({ paymentStatus: po.paymentStatus, advanceAmount: po.advanceAmount||'', paymentMode: po.paymentMode||'cash' });
+  };
+
+  const updatePayment = async () => {
+    try {
+      await procAPI.updatePO(payModal._id, { action:'update_payment', paymentStatus:payForm.paymentStatus, advanceAmount:parseFloat(payForm.advanceAmount)||0, paymentMode:payForm.paymentMode });
+      toast.success('Payment updated');
+      load();
+      setPayModal(null);
+    } catch { toast.error('Failed to update payment'); }
+  };
+
   if (loading) return <LoadingPage/>;
   const { monthly=[], pnl=[], pendingPaymentsPO=[] } = data;
   const rev=monthly.reduce((s,m)=>s+m.sales,0), exp=monthly.reduce((s,m)=>s+m.expenses,0);
@@ -118,17 +140,68 @@ export function AccountsDashboard() {
     <div className="page-body">
       <div><h1 style={{fontSize:'1.4rem',marginBottom:3}}>Accounts Dashboard</h1><p style={{color:'var(--text-3)',fontSize:'.875rem'}}>{fmt.date(new Date())}</p></div>
       <div className="stats-grid">
-        <Stat label="30-Day Revenue"  value={fmt.inr(rev)} color="var(--sky)"  icon={TrendingUp}/>
-        <Stat label="30-Day Expenses" value={fmt.inr(exp)} color="var(--amber)" icon={TrendingDown}/>
-        <Stat label="Net Profit"       value={fmt.inr(rev-exp)} color={(rev-exp)>=0?'var(--emerald)':'var(--red)'} icon={Calculator}/>
+        <Stat label="30-Day Revenue"      value={fmt.inr(rev)}       color="var(--sky)"     icon={TrendingUp}/>
+        <Stat label="30-Day Expenses"     value={fmt.inr(exp)}       color="var(--amber)"   icon={TrendingDown}/>
+        <Stat label="Net Profit"          value={fmt.inr(rev-exp)}   color={(rev-exp)>=0?'var(--emerald)':'var(--red)'} icon={Calculator}/>
         <Stat label="POs Pending Payment" value={pendingPaymentsPO.length} color="var(--rose)" sub="Require payment update"/>
       </div>
       <SectionCard title="POs Pending Payment" noPad>
         <table>
-          <thead><tr><th>PO Number</th><th>Vendor</th><th>Total</th><th>Advance</th><th>Balance</th><th>Payment Status</th><th>Created By</th></tr></thead>
-          <tbody>{pendingPaymentsPO.length===0?<tr><td colSpan={7} style={{textAlign:'center',padding:20,color:'var(--text-4)'}}>No pending payments</td></tr>:pendingPaymentsPO.map(po=>{const pb=orderBadge(po.paymentStatus);return(<tr key={po._id}><td className="font-mono" style={{color:'var(--indigo)',fontWeight:700,fontSize:'.8rem'}}>{po.poNumber}</td><td className="text-sm">{po.vendor?.name||'—'}</td><td style={{fontWeight:700}}>{fmt.inr(po.totalAmount)}</td><td>{fmt.inr(po.advanceAmount)}</td><td style={{fontWeight:700,color:'var(--red)'}}>{fmt.inr(po.balanceAmount)}</td><td><span className={'badge badge-amber'}>{po.paymentStatus}</span></td><td className="text-sm">{po.createdBy?.name||'—'}</td></tr>);})}</tbody>
+          <thead><tr><th>PO Number</th><th>Vendor</th><th>Total</th><th>Advance</th><th>Balance</th><th>Payment Status</th><th>Created By</th><th></th></tr></thead>
+          <tbody>
+            {pendingPaymentsPO.length===0
+              ? <tr><td colSpan={8} style={{textAlign:'center',padding:20,color:'var(--text-4)'}}>No pending payments</td></tr>
+              : pendingPaymentsPO.map(po=>(
+                <tr key={po._id}>
+                  <td className="font-mono" style={{color:'var(--indigo)',fontWeight:700,fontSize:'.8rem'}}>{po.poNumber}</td>
+                  <td className="text-sm">{po.vendor?.shopName||po.vendor?.name||'—'}</td>
+                  <td style={{fontWeight:700}}>{fmt.inr(po.totalAmount)}</td>
+                  <td>{fmt.inr(po.advanceAmount||0)}</td>
+                  <td style={{fontWeight:700,color:'var(--red)'}}>{fmt.inr(po.balanceAmount||0)}</td>
+                  <td><span className="badge badge-amber">{po.paymentStatus}</span></td>
+                  <td className="text-sm">{po.createdBy?.name||'—'}</td>
+                  <td>
+                    <button className="btn btn-primary btn-xs" onClick={()=>openPay(po)}>
+                      <CreditCard size={11}/> Pay
+                    </button>
+                  </td>
+                </tr>
+              ))
+            }
+          </tbody>
         </table>
       </SectionCard>
+
+      {payModal && (
+        <Modal open onClose={()=>setPayModal(null)} title={`Update Payment — ${payModal.poNumber}`}
+          footer={<><button className="btn btn-ghost btn-sm" onClick={()=>setPayModal(null)}>Cancel</button><button className="btn btn-primary btn-sm" onClick={updatePayment}>Save Payment</button></>}
+        >
+          <div style={{marginBottom:12,padding:'10px 14px',background:'var(--bg-2)',borderRadius:'var(--radius)',fontSize:'.875rem'}}>
+            <div>Vendor: <strong>{payModal.vendor?.shopName||payModal.vendor?.name}</strong></div>
+            <div>Total: <strong style={{color:'var(--sky)'}}>{fmt.inr(payModal.totalAmount)}</strong> &nbsp; Balance: <strong style={{color:'var(--red)'}}>{fmt.inr(payModal.balanceAmount||0)}</strong></div>
+          </div>
+          <FG label="Payment Status">
+            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+              {PAY_STATUSES.map(s=>(
+                <button key={s} onClick={()=>setPayForm(f=>({...f,paymentStatus:s}))} className="btn btn-sm"
+                  style={{flex:1,justifyContent:'center',background:payForm.paymentStatus===s?'var(--indigo)':'transparent',color:payForm.paymentStatus===s?'#fff':'var(--indigo)',border:'1.5px solid var(--indigo)'}}>
+                  {s==='pending'?'Pending':s==='advance'?'Advance Paid':s==='paid'?'Fully Paid':'Stopped'}
+                </button>
+              ))}
+            </div>
+          </FG>
+          {payForm.paymentStatus==='advance' && (
+            <FG label="Advance Amount (₹)">
+              <input type="number" value={payForm.advanceAmount} onChange={e=>setPayForm(f=>({...f,advanceAmount:e.target.value}))} placeholder="Enter amount paid" />
+            </FG>
+          )}
+          <FG label="Payment Mode">
+            <select value={payForm.paymentMode} onChange={e=>setPayForm(f=>({...f,paymentMode:e.target.value}))}>
+              {['cash','upi','card','cheque','online'].map(m=><option key={m} value={m}>{m.toUpperCase()}</option>)}
+            </select>
+          </FG>
+        </Modal>
+      )}
     </div>
   );
 }

@@ -48,6 +48,7 @@ export const procAPI = {
   createPO: d => api.post('/procurement/purchase-orders', d),
   updatePO: (id,d) => api.put('/procurement/purchase-orders/' + id, d),
   uploadBill: (id,f) => api.post('/procurement/purchase-orders/' + id + '/bill', f, { headers: {'Content-Type':'multipart/form-data'} }),
+  poPDF: id => api.get('/procurement/purchase-orders/' + id + '/pdf', { responseType: 'blob' }),
   // Order Tracking
   orderTracking: p => api.get('/procurement/order-tracking', { params: p }),
   updateDelivery: (id,d) => api.put('/procurement/order-tracking/' + id + '/delivery', d),
@@ -55,6 +56,12 @@ export const procAPI = {
   grc: p => api.get('/procurement/grc', { params: p }),
   createGRC: f => api.post('/procurement/grc', f, { headers: {'Content-Type':'multipart/form-data'} }),
   verifyGRC: id => api.put('/procurement/grc/' + id + '/verify'),
+  // Payment plan & alerts
+  setPaymentPlan: (id,d) => api.put('/procurement/purchase-orders/' + id, { action:'set_payment_plan', ...d }),
+  payInstallment: (id,d) => api.put('/procurement/purchase-orders/' + id, { action:'pay_installment', ...d }),
+  payAdvance: (id,d) => api.put('/procurement/purchase-orders/' + id, { action:'pay_advance', ...d }),
+  markPaid: (id,d) => api.put('/procurement/purchase-orders/' + id, { action:'mark_paid', ...d }),
+  runPaymentAlerts: () => api.post('/procurement/run-payment-alerts'),
   // Stats
   stats: () => api.get('/procurement/stats'),
 };
