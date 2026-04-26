@@ -36,6 +36,13 @@ app.use('/api/dashboard', require('./routes/dashboard'));
 
 app.get('/api/health', (_, res) => res.json({ ok: true, ts: new Date(), env: process.env.NODE_ENV }));
 
+// Serve frontend in production
+if (process.env.NODE_ENV === 'production') {
+  const frontendDist = path.join(__dirname, '../frontend/dist');
+  app.use(express.static(frontendDist));
+  app.get('*', (req, res) => res.sendFile(path.join(frontendDist, 'index.html')));
+}
+
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(err.status || 500).json({ message: err.message || 'Internal server error' });
