@@ -139,7 +139,8 @@ function UtilizationTab() {
 }
 
 export default function KitchenPage({ defaultTab }) {
-  const [tab, setTab] = useState('requests');
+  const [tab, setTab] = useState(defaultTab || 'requests');
+  useEffect(() => { if (defaultTab) setTab(defaultTab); }, [defaultTab]);
   return (
     <div className="page">
       <PageHdr icon={UtensilsCrossed} title="Kitchen" color="var(--red)" />

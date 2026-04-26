@@ -117,7 +117,6 @@ function RequirementsTab({ user }) {
             {DEPTS.map(d=><option key={d} value={d}>{cap(d)}</option>)}
           </select>
         </div>
-        <button className="btn btn-primary" onClick={()=>setModal(true)}><Plus size={14}/>New Request</button>
       </div>
 
       {loading ? <div style={{padding:32,textAlign:'center',color:'var(--text-4)'}}>Loading…</div> :
@@ -813,8 +812,8 @@ function PurchaseOrdersTab() {
     <div style={{display:'flex',flexDirection:'column',gap:12}}>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:10}}>
         {[['Draft',orders.filter(o=>o.orderStatus==='draft').length,'var(--text-3)',Clock],
-          ['Approved',orders.filter(o=>o.orderStatus==='approved').length,'var(--indigo)',CheckCircle],
-          ['Dispatched',orders.filter(o=>o.orderStatus==='dispatched').length,'var(--sky)',TrendingUp],
+          ['Order Placed',orders.filter(o=>o.orderStatus==='approved').length,'var(--indigo)',CheckCircle],
+          ['In Transit',orders.filter(o=>o.orderStatus==='dispatched').length,'var(--sky)',TrendingUp],
           ['Delivered',orders.filter(o=>o.orderStatus==='delivered').length,'var(--emerald)',CheckCircle],
           ['Pay Pending',orders.filter(o=>o.paymentStatus==='pending').length,'var(--amber)',AlertTriangle],
         ].map(([l,v,c,I])=><StatCard key={l} label={l} value={v} color={c} icon={I}/>)}
@@ -825,7 +824,7 @@ function PurchaseOrdersTab() {
           <div className="search-wrap"><span className="search-icon"><Search size={13}/></span><input style={{width:180}} placeholder="Search PO, vendor…" value={search} onChange={e=>setSearch(e.target.value)}/></div>
           <select value={filters.orderStatus} onChange={e=>setF(f=>({...f,orderStatus:e.target.value}))} style={{width:130}}>
             <option value="">All Status</option>
-            {['draft','approved','dispatched','delivered','cancelled'].map(s=><option key={s} value={s}>{cap(s)}</option>)}
+            {['draft','approved','dispatched','delivered','cancelled'].map(s=><option key={s} value={s}>{s === 'approved' ? 'Order Placed' : s === 'dispatched' ? 'In Transit' : cap(s)}</option>)}
           </select>
           <select value={filters.paymentStatus} onChange={e=>setF(f=>({...f,paymentStatus:e.target.value}))} style={{width:130}}>
             <option value="">All Payments</option>
@@ -1012,8 +1011,8 @@ function OrderTrackingTab() {
     <div style={{display:'flex',flexDirection:'column',gap:12}}>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))',gap:10}}>
         {[['Draft',orders.filter(o=>o.orderStatus==='draft').length,'var(--text-3)'],
-          ['Approved',orders.filter(o=>o.orderStatus==='approved').length,'var(--indigo)'],
-          ['Dispatched',orders.filter(o=>o.orderStatus==='dispatched').length,'var(--amber)'],
+          ['Order Placed',orders.filter(o=>o.orderStatus==='approved').length,'var(--indigo)'],
+          ['In Transit',orders.filter(o=>o.orderStatus==='dispatched').length,'var(--amber)'],
           ['Delivered',orders.filter(o=>o.orderStatus==='delivered').length,'var(--emerald)'],
         ].map(([l,v,c])=><StatCard key={l} label={l} value={v} color={c} icon={Clock}/>)}
       </div>
@@ -1022,7 +1021,7 @@ function OrderTrackingTab() {
         <div className="filter-bar">
           <div className="search-wrap"><span className="search-icon"><Search size={13}/></span><input style={{width:180}} placeholder="Search PO, vendor…" value={search} onChange={e=>setSearch(e.target.value)}/></div>
           <select value={deptF} onChange={e=>setDeptF(e.target.value)} style={{width:140}}><option value="">All Departments</option>{DEPTS.map(d=><option key={d} value={d}>{cap(d)}</option>)}</select>
-          <select value={statusF} onChange={e=>setStatusF(e.target.value)} style={{width:140}}><option value="">All Status</option>{['draft','approved','dispatched','delivered'].map(s=><option key={s} value={s}>{cap(s)}</option>)}</select>
+          <select value={statusF} onChange={e=>setStatusF(e.target.value)} style={{width:140}}><option value="">All Status</option>{['draft','approved','dispatched','delivered'].map(s=><option key={s} value={s}>{s === 'approved' ? 'Order Placed' : s === 'dispatched' ? 'In Transit' : cap(s)}</option>)}</select>
         </div>
         <button className="btn btn-ghost btn-sm" onClick={load}><RefreshCw size={13}/>Refresh</button>
       </div>
@@ -1229,6 +1228,7 @@ function QualityTab() {
 // ────────────────────────────────────────────────────────────────────
 export default function ProcurementPage({ defaultTab }) {
   const [tab,  setTab]  = useState(defaultTab || 'requirements');
+  useEffect(() => { if (defaultTab) setTab(defaultTab); }, [defaultTab]);
   const [user, setUser] = useState(null);
   useEffect(()=>{ authAPI.me().then(r=>setUser(r.data)).catch(()=>{}); },[]);
 

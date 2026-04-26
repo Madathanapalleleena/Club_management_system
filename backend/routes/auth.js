@@ -32,8 +32,9 @@ router.get('/users', protect, async (req, res) => {
 
 router.post('/users', protect, async (req, res) => {
   try {
-    const ok = ['chairman','secretary','gm','agm','hr_manager'];
+    const ok = ['chairman','secretary','gm','agm','hr_manager','store_manager'];
     if (!ok.includes(req.user.role)) return res.status(403).json({ message: 'Not authorised' });
+    if (req.user.role === 'store_manager' && req.body.role !== 'store_assistant') return res.status(403).json({ message: 'Can only create store assistants' });
     const exists = await User.findOne({ email: req.body.email?.toLowerCase().trim() });
     if (exists) return res.status(409).json({ message: 'Email already registered' });
     const user = await User.create({ ...req.body, createdBy: req.user._id });
@@ -43,9 +44,13 @@ router.post('/users', protect, async (req, res) => {
 
 router.put('/users/:id', protect, async (req, res) => {
   try {
-    const ok = ['chairman','secretary','gm','agm','hr_manager'];
+    const ok = ['chairman','secretary','gm','agm','hr_manager','store_manager'];
     if (!ok.includes(req.user.role)) return res.status(403).json({ message: 'Not authorised' });
     const { password, ...data } = req.body;
+    if (req.user.role === 'store_manager') {
+       const u = await User.findById(req.params.id);
+       if (u.role !== 'store_assistant') return res.status(403).json({ message: 'Not authorised to edit this user' });
+    }
     const user = await User.findByIdAndUpdate(req.params.id, { ...data, updatedBy: req.user._id }, { new: true }).select('-password');
     res.json(user);
   } catch (e) { res.status(500).json({ message: e.message }); }
@@ -55,6 +60,11 @@ router.put('/users/:id/toggle', protect, async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'Not found' });
+    
+    const ok = ['chairman','secretary','gm','agm','hr_manager','store_manager'];
+    if (!ok.includes(req.user.role)) return res.status(403).json({ message: 'Not authorised' });
+    if (req.user.role === 'store_manager' && user.role !== 'store_assistant') return res.status(403).json({ message: 'Not authorised' });
+
     user.isActive = !user.isActive; user.updatedBy = req.user._id;
     await user.save(); res.json(user);
   } catch (e) { res.status(500).json({ message: e.message }); }

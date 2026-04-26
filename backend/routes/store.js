@@ -142,7 +142,7 @@ router.get('/internal-requests', protect, async (req, res) => {
       .populate('requestedBy','name role department')
       .populate('approvedBy','name role')
       .populate('issuedBy','name role')
-      .populate('items.itemId','name quantity unit stockStatus')
+      .populate('items.itemId','name quantity unit stockStatus itemType category lastPurchased expiryDate thresholdValue')
       .populate('returnedItems.returnedBy','name')
       .populate('changeLog.performedBy','name role')
       .sort('-createdAt');
@@ -156,7 +156,7 @@ router.get('/internal-requests/:id', protect, async (req, res) => {
       .populate('requestedBy','name role department email')
       .populate('approvedBy','name role')
       .populate('issuedBy','name role')
-      .populate('items.itemId','name quantity unit unitPrice stockStatus')
+      .populate('items.itemId','name quantity unit unitPrice stockStatus itemType category lastPurchased expiryDate thresholdValue')
       .populate('returnedItems.returnedBy','name role')
       .populate('changeLog.performedBy','name role');
     res.json(r);
@@ -209,6 +209,7 @@ router.put('/internal-requests/:id', protect, async (req, res) => {
     } else if (action === 'flag_missing') {
       ir.missingItemsFlag = true; log.action = 'missing_flagged'; log.note = `Missing items flagged by ${req.user.name}`;
       await Notif.notifyRoles(['procurement_manager','gm'], '🔴 Missing Items', `${ir.requestNumber} — items not in stock`, 'alert', ir._id, 'store');
+      await Notif.notifyUser(ir.requestedBy._id, '🔴 Missing Items in Store', `Some items for ${ir.requestNumber} are missing and reported to procurement`, 'warning', ir._id, 'store');
     }
 
     if (returnedItems?.length > 0) {

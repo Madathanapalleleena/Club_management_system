@@ -55,8 +55,14 @@ function BookingsTab() {
   const checkSlot=async()=>{
     if(!form.banquetType||!form.bookingDate||!form.slot){toast.error("Select hall, date & slot");return;}
     setChecking(true);
-    try{const r=await banquetAPI.checkAvailability({banquetType:form.banquetType,bookingDate:form.bookingDate,slot:form.slot,excludeId:editItem?._id});setAvail(r.data);}
-    finally{setChecking(false);}
+    try{
+      const r=await banquetAPI.checkAvailability({banquetType:form.banquetType,bookingDate:form.bookingDate,slot:form.slot,excludeId:editItem?._id});
+      setAvail(r.data);
+    } catch(e) {
+      toast.error(e.response?.data?.message||"Failed to check availability");
+    } finally {
+      setChecking(false);
+    }
   };
 
   const handleSave=async()=>{
@@ -206,14 +212,22 @@ function BookingsTab() {
 
       {/* Create / Edit Modal */}
       <Modal open={modal} onClose={()=>{setModal(false);setAvail(null);setEditItem(null);}} title={editItem?"Edit Booking":"New Banquet Booking"} size="modal-lg"
-        footer={<><button className="btn btn-ghost btn-sm" onClick={()=>{setModal(false);setAvail(null);setEditItem(null);}}>Cancel</button><button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving||(!avail?.available&&!editItem)}>{saving?"Saving...":editItem?"Update":"Confirm Booking"}</button></>}
+        footer={
+          <>
+            <button className="btn btn-ghost btn-sm" onClick={()=>{setModal(false);setAvail(null);setEditItem(null);}}>Cancel</button>
+            <div style={{display:'inline-flex',alignItems:'center',gap:10}}>
+              {(!avail?.available&&!editItem)&&<span style={{fontSize:'.75rem',color:'var(--red)',fontWeight:600}}>Check availability first!</span>}
+              <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving||(!avail?.available&&!editItem)}>{saving?"Saving...":editItem?"Update":"Confirm Booking"}</button>
+            </div>
+          </>
+        }
       >
         <div style={{background:"var(--indigo-lt)",borderRadius:"var(--radius)",padding:14,border:"1px solid var(--indigo-md)"}}>
           <div style={{fontWeight:700,marginBottom:10,color:"var(--indigo)",fontSize:".875rem"}}>Slot Booking</div>
           <div className="form-row cols-3">
-            <FG label="Hall / Venue" required><select value={form.banquetType} onChange={e=>setForm({...form,banquetType:e.target.value})}>{BANQUET_TYPES.map(t=><option key={t} value={t}>{t}</option>)}</select></FG>
-            <FG label="Booking Date" required><input type="date" value={form.bookingDate} min={new Date().toISOString().slice(0,10)} onChange={e=>setForm({...form,bookingDate:e.target.value})}/></FG>
-            <FG label="Time Slot" required><select value={form.slot} onChange={e=>setForm({...form,slot:e.target.value})}>{SLOTS.map(s=><option key={s.id} value={s.id}>{s.label} ({s.time})</option>)}</select></FG>
+            <FG label="Hall / Venue" required><select value={form.banquetType} onChange={e=>{setForm({...form,banquetType:e.target.value});setAvail(null);}}>{BANQUET_TYPES.map(t=><option key={t} value={t}>{t}</option>)}</select></FG>
+            <FG label="Booking Date" required><input type="date" value={form.bookingDate} min={new Date().toISOString().slice(0,10)} onChange={e=>{setForm({...form,bookingDate:e.target.value});setAvail(null);}}/></FG>
+            <FG label="Time Slot" required><select value={form.slot} onChange={e=>{setForm({...form,slot:e.target.value});setAvail(null);}}>{SLOTS.map(s=><option key={s.id} value={s.id}>{s.label} ({s.time})</option>)}</select></FG>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
             <button className="btn btn-primary btn-sm" onClick={checkSlot} disabled={checking}>{checking?"Checking...":"Check Availability"}</button>

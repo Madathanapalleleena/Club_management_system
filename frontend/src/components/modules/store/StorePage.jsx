@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Package, Plus, Search, Edit2, ArrowUpDown, AlertTriangle, FileText, CheckCircle, RotateCcw, Truck, Eye, Trash2, Upload } from 'lucide-react';
-import { storeAPI, procAPI } from '../../../api';
+import { Package, Plus, Search, Edit2, ArrowUpDown, AlertTriangle, FileText, RotateCcw, Eye, Upload, Download, Power } from 'lucide-react';
+import { storeAPI, procAPI, authAPI } from '../../../api';
+import { useAuth } from '../../../contexts/AuthContext';
 import { fmt, stockBadge, reqBadge, orderBadge, payBadge } from '../../../utils/helpers';
 import { Modal, FG, PageHdr, Empty, Tabs, Stat } from '../../ui';
 import toast from 'react-hot-toast';
@@ -23,6 +24,56 @@ function ItemsTab() {
   const [editing, setEdit] = useState(null);
   const [form, setForm] = useState({ name: '', itemType: 'raw material', category: '', quantity: 0, unit: 'kg', unitPrice: 0, thresholdValue: 0, expiryDate: '', department: 'kitchen', location: '' });
   const [adjForm, setAdjF] = useState({ type: 'add', quantity: '', notes: '' });
+  const [docModal, setDocModal] = useState(false);
+  const bulkInvRef = React.useRef(null);
+
+  const handleBulkInventory = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const text = evt.target.result;
+        const rows = text.split(/\r?\n/).filter(r => r.trim() !== '');
+        if (rows.length <= 1) { toast.error('CSV file is empty or only contains headers.'); return; }
+        let successCount = 0, failCount = 0;
+        toast.loading('Importing items...');
+        for (let i = 1; i < rows.length; i++) {
+          const parts = rows[i].split(',');
+          if (parts.length < 5) continue;
+          const rowData = {
+            name: parts[0]?.trim(),
+            itemType: parts[1]?.trim() || 'raw material',
+            category: parts[2]?.trim() || 'General',
+            quantity: parseFloat(parts[3]) || 0,
+            unit: parts[4]?.trim() || 'kg',
+            unitPrice: parseFloat(parts[5]) || 0,
+            thresholdValue: parseFloat(parts[6]) || 0,
+          };
+          const exDate = parts[7]?.trim();
+          if (exDate) rowData.expiryDate = exDate;
+          if (!rowData.name) continue;
+          try { await storeAPI.createItem(rowData); successCount++; }
+          catch (err) { console.error('Bulk Import Error:', err.response?.data || err.message); failCount++; }
+        }
+        toast.dismiss();
+        if (successCount > 0) toast.success(`${successCount} items successfully imported into inventory.`);
+        if (failCount > 0) toast.error(`${failCount} items failed to import.`);
+        load();
+      } catch (err) { toast.dismiss(); toast.error('Failed to parse CSV file.'); }
+      if (bulkInvRef.current) bulkInvRef.current.value = '';
+    };
+    reader.readAsText(file);
+  };
+
+  const handleDownloadTemplate = () => {
+    const csvContent = 'Item Name,Type(raw material/perishable/packaged/liquor/consumable/fuel/equipment),Category,Quantity,Unit,Unit Price,Threshold,Expiry Date(YYYY-MM-DD)\n';
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.setAttribute('href', URL.createObjectURL(blob));
+    link.setAttribute('download', 'inventory_bulk_template.csv');
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+  };
 
   const load = useCallback(() => {
     setLoad(true);
@@ -33,7 +84,8 @@ function ItemsTab() {
     if (filters.view === 'low') p.lowStock = 'true';
     if (filters.view === 'expiring') p.expiringSoon = 'true';
     Promise.all([storeAPI.items(p), storeAPI.categories(), storeAPI.summary()])
-      .then(([i, c, s]) => { setItems(i.data); setCats(c.data); setSum(s.data); }).finally(() => setLoad(false));
+      .then(([i, c, s]) => { setItems(i.data); setCats(c.data); setSum(s.data); })
+      .finally(() => setLoad(false));
   }, [filters]);
   useEffect(() => { load(); }, [load]);
 
@@ -91,7 +143,12 @@ function ItemsTab() {
             <option value="expiring">Expiring Soon</option>
           </select>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={openCreate}><Plus size={13} />Add Item</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-subtle btn-sm" onClick={() => setDocModal(true)} type="button"><Download size={13} />CSV Template</button>
+          <input type="file" ref={bulkInvRef} style={{ display: 'none' }} onChange={handleBulkInventory} accept=".csv,.xlsx,.xls,.json,.txt" />
+          <button className="btn btn-subtle btn-sm" onClick={() => bulkInvRef.current?.click()} type="button"><Upload size={13} />Bulk Upload</button>
+          <button className="btn btn-primary btn-sm" onClick={openCreate}><Plus size={13} />Add Item</button>
+        </div>
       </div>
 
       {loading ? <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-4)' }}>Loading...</div> :
@@ -124,7 +181,7 @@ function ItemsTab() {
                         <td><span className={`badge ${b.cls}`}>{b.label}</span></td>
                         <td>
                           <div style={{ display: 'flex', gap: 3 }}>
-                            <button className="btn btn-icon btn-ghost btn-sm" onClick={() => { setAdj(i); setAdjF({ type: 'add', quantity: '', notes: '' }) }} title="Adjust"><ArrowUpDown size={13} /></button>
+                            <button className="btn btn-icon btn-ghost btn-sm" onClick={() => { setAdj(i); setAdjF({ type: 'add', quantity: '', notes: '' }); }} title="Adjust"><ArrowUpDown size={13} /></button>
                             <button className="btn btn-icon btn-ghost btn-sm" onClick={() => showTxns(i)} title="History"><FileText size={13} /></button>
                             <button className="btn btn-icon btn-ghost btn-sm" onClick={() => openEdit(i)} title="Edit"><Edit2 size={13} /></button>
                           </div>
@@ -142,7 +199,10 @@ function ItemsTab() {
       <Modal open={modal} onClose={() => setModal(false)} title={editing ? 'Edit Item' : 'Add Item'} size="modal-lg"
         footer={<><button className="btn btn-ghost btn-sm" onClick={() => setModal(false)}>Cancel</button><button className="btn btn-primary btn-sm" onClick={save}>{editing ? 'Update' : 'Add'}</button></>}
       >
-        <div className="form-row cols-2"><FG label="Item Name" required><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></FG><FG label="Category" required><input value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} placeholder="Grains, Proteins..." /></FG></div>
+        <div className="form-row cols-2">
+          <FG label="Item Name" required><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></FG>
+          <FG label="Category" required><input value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} placeholder="Grains, Proteins..." /></FG>
+        </div>
         <div className="form-row cols-3">
           <FG label="Item Type"><select value={form.itemType} onChange={e => setForm({ ...form, itemType: e.target.value })}>{TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></FG>
           <FG label="Unit"><select value={form.unit} onChange={e => setForm({ ...form, unit: e.target.value })}>{UNITS.map(u => <option key={u} value={u}>{u}</option>)}</select></FG>
@@ -151,7 +211,7 @@ function ItemsTab() {
         <div className="form-row cols-3">
           <FG label="Quantity"><input type="number" value={form.quantity} onChange={e => setForm({ ...form, quantity: parseFloat(e.target.value) || 0 })} /></FG>
           <FG label="Unit Price (₹)"><input type="number" value={form.unitPrice} onChange={e => setForm({ ...form, unitPrice: parseFloat(e.target.value) || 0 })} /></FG>
-          <FG label="Threshold Value" ><input type="number" value={form.thresholdValue} onChange={e => setForm({ ...form, thresholdValue: parseFloat(e.target.value) || 0 })} hint="Alert at 50% of this" /></FG>
+          <FG label="Threshold Value"><input type="number" value={form.thresholdValue} onChange={e => setForm({ ...form, thresholdValue: parseFloat(e.target.value) || 0 })} hint="Alert at 50% of this" /></FG>
         </div>
         <div className="form-row cols-2">
           <FG label="Expiry Date"><input type="date" value={form.expiryDate} onChange={e => setForm({ ...form, expiryDate: e.target.value })} /></FG>
@@ -205,6 +265,21 @@ function ItemsTab() {
           }
         </Modal>
       )}
+
+      {/* Template Download Modal */}
+      {docModal && (
+        <Modal open onClose={() => setDocModal(false)} title="Download CSV Template"
+          footer={<><button className="btn btn-ghost btn-sm" onClick={() => setDocModal(false)}>Cancel</button><button className="btn btn-primary btn-sm" onClick={() => { handleDownloadTemplate(); setDocModal(false); }}><Download size={13} /> Download CSV</button></>}
+        >
+          <div style={{ padding: '10px 14px', background: 'var(--amber-lt)', borderRadius: 'var(--radius)', fontSize: '.8125rem', color: 'var(--text-1)' }}>
+            <strong style={{ display: 'block', marginBottom: 6, color: 'var(--amber)', fontSize: '.875rem' }}><AlertTriangle size={15} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }} /> Please Read Carefully:</strong>
+            <ul style={{ margin: 0, paddingLeft: 20, color: 'var(--text-2)' }}>
+              <li style={{ marginBottom: 4 }}>Do not change or remove the top row (column headers).</li>
+              <li>Ensure that the <strong>Expiry Date</strong> data is strictly formatted exactly as <strong>YYYY-MM-DD</strong>.</li>
+            </ul>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -216,7 +291,7 @@ function GRCTab() {
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState({ poNumber: '', items: [{ itemName: '', orderedQty: '', receivedQty: '', missingQty: 0, mismatchNotes: '' }], notes: '', status: 'pending' });
 
-  const load = () => { setLoad(true); storeAPI.grcs().then(r => setGrcs(r.data)).finally(() => setLoad(false)); };
+  const load = () => { setLoad(true); storeAPI.grc().then(r => setGrcs(r.data)).finally(() => setLoad(false)); };
   useEffect(() => { load(); }, []);
 
   const addRow = () => setForm(f => ({ ...f, items: [...f.items, { itemName: '', orderedQty: '', receivedQty: '', missingQty: 0, mismatchNotes: '' }] }));
@@ -230,9 +305,7 @@ function GRCTab() {
     } catch (e) { toast.error('Failed'); }
   };
 
-  const verify = async id => {
-    await storeAPI.verifyGRC(id); toast.success('Verified'); load();
-  };
+  const verify = async id => { await storeAPI.verifyGRC(id); toast.success('Verified'); load(); };
 
   const statusColor = { pending: 'var(--amber)', partial: 'var(--sky)', completed: 'var(--emerald)', disputed: 'var(--red)' };
 
@@ -306,7 +379,7 @@ function InternalRequestsTab({ setTab }) {
   const load = useCallback(() => {
     setLoad(true);
     const p = {}; if (statusF) p.status = statusF;
-    storeAPI.internalRequests(p).then(r => setReqs(r.data)).finally(() => setLoad(false));
+    storeAPI.internalReqs(p).then(r => setReqs(r.data)).finally(() => setLoad(false));
   }, [statusF]);
   useEffect(() => { load(); }, [load]);
 
@@ -355,7 +428,7 @@ function InternalRequestsTab({ setTab }) {
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
             <div className="table-wrap">
               <table>
-                <thead><tr><th>Req #</th><th>From</th><th>Items</th><th>Priority</th><th>Status</th><th>Approved By</th><th>Issued By</th><th>Date</th><th></th></tr></thead>
+                <thead><tr><th>Req #</th><th>From</th><th>Items</th><th>Priority</th><th>Status</th><th style={{ minWidth: 130 }}>Approved By (Manager/Asst.)</th><th>Issued By</th><th>Date</th><th></th></tr></thead>
                 <tbody>
                   {reqs.map(r => {
                     const s = reqBadge(r.status) || { cls: 'badge-muted', label: r.status };
@@ -406,21 +479,37 @@ function InternalRequestsTab({ setTab }) {
             <div><div style={{ fontSize: '.75rem', color: 'var(--text-4)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em' }}>Raised By</div><div style={{ fontWeight: 600, marginTop: 2 }}>{detailModal.requestedBy?.name || '—'}</div></div>
             <div><div style={{ fontSize: '.75rem', color: 'var(--text-4)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em' }}>Status</div><div style={{ marginTop: 2 }}><span style={{ background: statusColor[detailModal.status] + '18', color: statusColor[detailModal.status], borderRadius: 20, padding: '2px 8px', fontSize: '.75rem', fontWeight: 700 }}>{detailModal.status?.replace('_', ' ')}</span></div></div>
           </div>
-          {detailModal.approvedBy && <div style={{ padding: '8px 12px', background: 'var(--emerald-lt)', borderRadius: 8, fontSize: '.8125rem', color: 'var(--emerald)', fontWeight: 600 }}>✓ Approved by: {detailModal.approvedBy?.name} on {fmt.date(detailModal.approvedAt)}</div>}
+          {detailModal.approvedBy && <div style={{ padding: '8px 12px', background: 'var(--emerald-lt)', borderRadius: 8, fontSize: '.8125rem', color: 'var(--emerald)', fontWeight: 600 }}>✓ Approved by (Manager/Asst.): {detailModal.approvedBy?.name} on {fmt.date(detailModal.approvedAt)}</div>}
           {detailModal.issuedBy && <div style={{ padding: '8px 12px', background: 'var(--indigo-lt)', borderRadius: 8, fontSize: '.8125rem', color: 'var(--indigo)', fontWeight: 600 }}>📦 Items issued by: {detailModal.issuedBy?.name}</div>}
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
             <table>
-              <thead><tr><th>Item</th><th>Category</th><th>Requested Qty</th><th>Approved Qty</th><th>Status</th></tr></thead>
+              <thead><tr><th>Item Details</th><th>Stock & Price</th><th>Qty Req → Appr</th><th>Status</th></tr></thead>
               <tbody>
-                {detailModal.items?.map((it, i) => (
-                  <tr key={i}>
-                    <td style={{ fontWeight: 600 }}>{it.itemName}</td>
-                    <td className="text-3 text-sm">{it.category || '—'}</td>
-                    <td>{it.quantity} {it.unit}</td>
-                    <td style={{ fontWeight: 600, color: 'var(--emerald)' }}>{it.approvedQty || it.quantity} {it.unit}</td>
-                    <td><span className={`badge ${it.status === 'issued' ? 'badge-green' : it.status === 'approved' ? 'badge-indigo' : 'badge-muted'}`}>{it.status}</span></td>
-                  </tr>
-                ))}
+                {detailModal.items?.map((it, i) => {
+                  const itemInfo = it.itemId || {};
+                  return (
+                    <tr key={i}>
+                      <td>
+                        <div style={{ fontWeight: 600 }}>{it.itemName}</div>
+                        <div className="text-3 text-xs" style={{ marginTop: 2 }}>
+                          {itemInfo.itemType ? <span style={{ textTransform: 'capitalize', marginRight: 6 }}>{itemInfo.itemType}</span> : null}
+                          {it.category || itemInfo.category || '—'}
+                        </div>
+                        {itemInfo.expiryDate && <div className="text-xs" style={{ marginTop: 2, color: 'var(--red)' }}>Expiry: {fmt.date(itemInfo.expiryDate)}</div>}
+                        {itemInfo.lastPurchased && <div className="text-xs text-3" style={{ marginTop: 2 }}>Last Pur: {fmt.date(itemInfo.lastPurchased)}</div>}
+                      </td>
+                      <td>
+                        <div style={{ fontWeight: 600, color: itemInfo.stockStatus === 'critical' ? 'var(--red)' : 'inherit' }}>{itemInfo.quantity != null ? `${itemInfo.quantity} ${itemInfo.unit || it.unit}` : 'Unknown'}</div>
+                        <div className="text-3 text-xs" style={{ marginTop: 2 }}>{fmt.inr(itemInfo.unitPrice || 0)} / {itemInfo.unit || it.unit}</div>
+                      </td>
+                      <td>
+                        <div style={{ color: 'var(--text-2)' }}>{it.quantity} {it.unit}</div>
+                        <div style={{ fontWeight: 600, color: 'var(--emerald)', marginTop: 2 }}>→ {it.approvedQty || it.quantity} {it.unit}</div>
+                      </td>
+                      <td><span className={`badge ${it.status === 'issued' ? 'badge-green' : it.status === 'approved' ? 'badge-indigo' : it.status === 'rejected' ? 'badge-red' : 'badge-muted'}`}>{it.status}</span></td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -531,9 +620,7 @@ function OrderTrackingTab() {
                       <td><span className={`badge ${os.cls}`}>{os.label}</span></td>
                       <td className="text-sm text-3">{fmt.date(po.expectedDelivery)}</td>
                       <td><span className={`badge ${po.grcUploaded ? 'badge-green' : 'badge-muted'}`}>{po.grcUploaded ? '✓ Done' : 'Pending'}</span></td>
-                      <td>
-                        {['approved', 'delivered'].includes(po.orderStatus) && <button className="btn btn-ghost btn-xs" onClick={() => openEditPO(po)}>Edit Items</button>}
-                      </td>
+                      <td>{['approved', 'delivered'].includes(po.orderStatus) && <button className="btn btn-ghost btn-xs" onClick={() => openEditPO(po)}>Edit Items</button>}</td>
                     </tr>
                   );
                 })}
@@ -542,7 +629,6 @@ function OrderTrackingTab() {
           </div>
         </div>
       }
-      {/* Edit PO Modal */}
       {editPO && (
         <Modal open size="modal-lg" onClose={() => setEditPO(null)} title={`Edit PO Items — ${editPO.poNumber}`}
           footer={<><button className="btn btn-ghost btn-sm" onClick={() => setEditPO(null)}>Cancel</button><button className="btn btn-primary btn-sm" onClick={saveEditPO}>Save Changes</button></>}
@@ -575,11 +661,25 @@ function ProcurementRequestsTab() {
   const [loading, setLoad] = useState(true);
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState({ department: 'store', priority: 'medium', items: [{ itemName: '', quantity: '', unit: 'kg', category: '' }], notes: '' });
+  const fileInputRef = React.useRef(null);
 
-  const load = () => {
-    setLoad(true);
-    procAPI.requests({ department: 'store' }).then(r => setReqs(r.data)).finally(() => setLoad(false));
+  const handleBulkUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    toast.success(`${file.name} attached for bulk request`);
+    setForm(f => ({ ...f, notes: f.notes ? f.notes + `\n[Attached Bulk File: ${file.name}]` : `[Attached Bulk File: ${file.name}]` }));
   };
+
+  const handleDownloadTemplate = () => {
+    const csvContent = 'Item Name,Category,Quantity,Unit\n';
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.setAttribute('href', URL.createObjectURL(blob));
+    link.setAttribute('download', 'procurement_bulk_template.csv');
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+  };
+
+  const load = () => { setLoad(true); procAPI.requests({ department: 'store' }).then(r => setReqs(r.data)).finally(() => setLoad(false)); };
   useEffect(() => { load(); }, []);
 
   const addRow = () => setForm(f => ({ ...f, items: [...f.items, { itemName: '', quantity: '', unit: 'kg', category: '' }] }));
@@ -590,11 +690,9 @@ function ProcurementRequestsTab() {
     try {
       await procAPI.createRequest(form);
       toast.success('Procurement request raised');
-      load();
-      setModal(false);
+      load(); setModal(false);
       setForm({ department: 'store', priority: 'medium', items: [{ itemName: '', quantity: '', unit: 'kg', category: '' }], notes: '' });
-    }
-    catch (e) { toast.error(e.response?.data?.message || 'Failed'); }
+    } catch (e) { toast.error(e.response?.data?.message || 'Failed'); }
   };
 
   const statusColor = { pending: 'var(--amber)', approved: 'var(--emerald)', rejected: 'var(--red)', po_raised: 'var(--indigo)' };
@@ -605,7 +703,6 @@ function ProcurementRequestsTab() {
         <span className="text-3 text-sm">{reqs.length} Procurement Request(s)</span>
         <button className="btn btn-primary btn-sm" onClick={() => setModal(true)}><Plus size={13} />Raise Request to Procurement</button>
       </div>
-
       {loading ? <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-4)' }}>Loading...</div> :
         reqs.length === 0 ? <Empty icon={FileText} title="No procurement requests" /> :
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -618,11 +715,7 @@ function ProcurementRequestsTab() {
                       <td className="font-mono" style={{ color: 'var(--indigo)', fontWeight: 700, fontSize: '.8rem' }}>{r.requestNumber}</td>
                       <td className="text-sm">{r.items?.length} items</td>
                       <td><span className={`badge ${r.priority === 'urgent' ? 'badge-red' : r.priority === 'high' ? 'badge-amber' : 'badge-muted'}`}>{r.priority}</span></td>
-                      <td>
-                        <span style={{ background: (statusColor[r.status] || 'var(--text-4)') + '18', color: statusColor[r.status], borderRadius: 20, padding: '2px 8px', fontSize: '.72rem', fontWeight: 700 }}>
-                          {r.status?.replace('_', ' ')}
-                        </span>
-                      </td>
+                      <td><span style={{ background: (statusColor[r.status] || 'var(--text-4)') + '18', color: statusColor[r.status], borderRadius: 20, padding: '2px 8px', fontSize: '.72rem', fontWeight: 700 }}>{r.status?.replace('_', ' ')}</span></td>
                       <td className="text-sm text-3">{fmt.date(r.createdAt)}</td>
                     </tr>
                   ))}
@@ -631,8 +724,6 @@ function ProcurementRequestsTab() {
             </div>
           </div>
       }
-
-      {/* Create Modal */}
       <Modal open={modal} onClose={() => setModal(false)} title="Raise Procurement Request" size="modal-lg"
         footer={<><button className="btn btn-ghost btn-sm" onClick={() => setModal(false)}>Cancel</button><button className="btn btn-primary btn-sm" onClick={save}>Submit Request</button></>}
       >
@@ -645,8 +736,10 @@ function ProcurementRequestsTab() {
           <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
             <label style={{ fontSize: '.8125rem', fontWeight: 600, color: 'var(--text-2)' }}>Items Needed</label>
             <div style={{ display: 'flex', gap: 6 }}>
-              <button className="btn btn-subtle btn-sm"><Upload size={12} /> Bulk Upload</button>
-              <button className="btn btn-subtle btn-sm" onClick={addRow}><Plus size={12} />Add Item</button>
+              <button className="btn btn-subtle btn-sm" onClick={handleDownloadTemplate} type="button"><Download size={12} /> CSV Format</button>
+              <input type="file" ref={fileInputRef} style={{ display: 'none' }} onChange={handleBulkUpload} accept=".csv,.xlsx,.xls,.json,.txt" />
+              <button className="btn btn-subtle btn-sm" onClick={() => fileInputRef.current?.click()} type="button"><Upload size={12} /> Bulk Upload</button>
+              <button className="btn btn-subtle btn-sm" onClick={addRow} type="button"><Plus size={12} />Add Item</button>
             </div>
           </div>
           {form.items.map((it, i) => (
@@ -654,7 +747,7 @@ function ProcurementRequestsTab() {
               <input placeholder="Item name *" value={it.itemName} onChange={e => setItem(i, 'itemName', e.target.value)} />
               <input placeholder="Category" value={it.category} onChange={e => setItem(i, 'category', e.target.value)} />
               <input placeholder="Qty" type="number" value={it.quantity} onChange={e => setItem(i, 'quantity', e.target.value)} />
-              <select value={it.unit} onChange={e => setItem(i, 'unit', e.target.value)}>{['kg', 'g', 'litre', 'ml', 'pcs', 'box', 'can', 'bottle', 'packet', 'roll', 'bag'].map(u => <option key={u} value={u}>{u}</option>)}</select>
+              <select value={it.unit} onChange={e => setItem(i, 'unit', e.target.value)}>{UNITS.map(u => <option key={u} value={u}>{u}</option>)}</select>
             </div>
           ))}
         </div>
@@ -664,26 +757,119 @@ function ProcurementRequestsTab() {
   );
 }
 
+// ── ASSISTANTS TAB ───────────────────────────────────────────────
+function AssistantsTab() {
+  const [assistants, setAssistants] = useState([]);
+  const [loading, setLoad] = useState(true);
+  const [modal, setModal] = useState(false);
+  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'store_assistant', mobile: '', department: 'store' });
+
+  const load = useCallback(() => {
+    setLoad(true);
+    authAPI.users({ role: 'store_assistant' }).then(r => setAssistants(r.data)).catch(() => { toast.error('Failed to load'); }).finally(() => setLoad(false));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const save = async () => {
+    if (!form.name || !form.email || (!form._id && !form.password)) return toast.error('Fill required fields');
+    try {
+      if (form._id) await authAPI.update(form._id, form);
+      else await authAPI.create(form);
+      toast.success('Assistant saved'); load(); setModal(false);
+      setForm({ name: '', email: '', password: '', role: 'store_assistant', mobile: '', department: 'store' });
+    } catch (e) { toast.error(e.response?.data?.message || 'Failed'); }
+  };
+
+  const toggle = async (id) => {
+    try { await authAPI.toggle(id); toast.success('Status updated'); load(); }
+    catch (e) { toast.error('Failed'); }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div className="flex items-center justify-between">
+        <span className="text-3 text-sm">Manage your Store Assistants</span>
+        <button className="btn btn-primary btn-sm" onClick={() => { setForm({ name: '', email: '', password: '', role: 'store_assistant', mobile: '', department: 'store' }); setModal(true); }}><Plus size={13} />Add Assistant</button>
+      </div>
+      {loading ? <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-4)' }}>Loading...</div> :
+        assistants.length === 0 ? <Empty title="No assistants" /> :
+          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>Name</th><th>Email</th><th>Mobile</th><th>Status</th><th>Actions</th></tr></thead>
+                <tbody>
+                  {assistants.map(a => (
+                    <tr key={a._id} style={{ opacity: a.isActive ? 1 : 0.6 }}>
+                      <td style={{ fontWeight: 600 }}>{a.name}</td>
+                      <td>{a.email}</td>
+                      <td>{a.mobile || '—'}</td>
+                      <td><span className={`badge ${a.isActive ? 'badge-green' : 'badge-red'}`}>{a.isActive ? 'Active' : 'Inactive'}</span></td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button className="btn btn-icon btn-ghost btn-sm" onClick={() => { setForm({ ...a, password: '' }); setModal(true); }} title="Edit"><Edit2 size={13} /></button>
+                          <button className="btn btn-icon btn-ghost btn-sm" onClick={() => toggle(a._id)} title={a.isActive ? 'Deactivate' : 'Activate'}><Power size={13} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+      }
+      <Modal open={modal} onClose={() => setModal(false)} title={form._id ? 'Edit Assistant' : 'Add Store Assistant'}
+        footer={<><button className="btn btn-ghost btn-sm" onClick={() => setModal(false)}>Cancel</button><button className="btn btn-primary btn-sm" onClick={save}>{form._id ? 'Update' : 'Add'}</button></>}
+      >
+        <div className="form-row cols-2">
+          <FG label="Name" required><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></FG>
+          <FG label="Email" required><input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></FG>
+        </div>
+        <div className="form-row cols-2">
+          <FG label="Mobile"><input type="tel" value={form.mobile} onChange={e => setForm({ ...form, mobile: e.target.value })} /></FG>
+          <FG label={form._id ? 'New Password (leave blank to keep)' : 'Password'} required={!form._id}><input type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} /></FG>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+// ── STORE PAGE ───────────────────────────────────────────────────
 export default function StorePage({ defaultTab }) {
-  const [tab, setTab] = useState(defaultTab || 'items');
+  const { user } = useAuth();
+
+  const allTabs = [
+    { id: 'items',       label: 'Inventory' },
+    { id: 'grc',         label: 'GRC / Delivery' },
+    { id: 'internal',    label: 'Internal Requests' },
+    { id: 'procurement', label: 'Procurement Reqs' },
+    { id: 'tracking',    label: 'Order Tracking' },
+    ...(user?.role === 'store_manager' ? [{ id: 'assistants', label: 'Assistants' }] : []),
+  ];
+
+  const resolvedDefault = allTabs.find(t => t.id === defaultTab) ? defaultTab : 'items';
+  const [tab, setTab] = useState(resolvedDefault);
+
+  useEffect(() => {
+    if (defaultTab) {
+      const valid = allTabs.find(t => t.id === defaultTab);
+      setTab(valid ? defaultTab : 'items');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultTab]);
+
   return (
     <div className="page">
       <PageHdr icon={Package} title="Store Management" color="var(--amber)" />
       <div style={{ padding: '0 24px', background: 'var(--white)', borderBottom: '1.5px solid var(--border)' }}>
-        <Tabs tabs={[
-          { id: 'items', label: 'Inventory' },
-          { id: 'grc', label: 'GRC / Delivery' },
-          { id: 'internal', label: 'Internal Requests' },
-          { id: 'procurement', label: 'Procurement Reqs' },
-          { id: 'tracking', label: 'Order Tracking' }
-        ]} active={tab} onChange={setTab} />
+        <Tabs tabs={allTabs} active={tab} onChange={setTab} />
       </div>
       <div className="page-body">
-        {tab === 'items' && <ItemsTab setTab={setTab} />}
-        {tab === 'grc' && <GRCTab setTab={setTab} />}
-        {tab === 'internal' && <InternalRequestsTab setTab={setTab} />}
+        {tab === 'items'       && <ItemsTab setTab={setTab} />}
+        {tab === 'grc'         && <GRCTab setTab={setTab} />}
+        {tab === 'internal'    && <InternalRequestsTab setTab={setTab} />}
         {tab === 'procurement' && <ProcurementRequestsTab setTab={setTab} />}
-        {tab === 'tracking' && <OrderTrackingTab setTab={setTab} />}
+        {tab === 'tracking'    && <OrderTrackingTab setTab={setTab} />}
+        {tab === 'assistants'  && user?.role === 'store_manager' && <AssistantsTab />}
       </div>
     </div>
   );
