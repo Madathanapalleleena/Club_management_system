@@ -5,7 +5,7 @@ import { Stat, LoadingPage, ChartTip, SectionCard } from '../../ui';
 import { TrendingUp, TrendingDown, ShoppingCart, Package, AlertTriangle, Activity } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
-export default function GMDashboard() {
+export default function AGMDashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoad] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -18,14 +18,13 @@ export default function GMDashboard() {
   if (loading && !data) return <LoadingPage/>;
   const { monthly=[], pnl=[], storeSummary={}, pendingReqs=0, pendingPOs=0, recentPOs=[] } = data || {};
   const rev=monthly.reduce((s,m)=>s+m.sales,0), exp=monthly.reduce((s,m)=>s+m.expenses,0);
-  
   return (
     <div className="page-body">
       <div className="flex items-center justify-between">
-        <div><h1 style={{fontSize:'1.4rem',marginBottom:3}}>Operations Dashboard</h1><p style={{color:'var(--text-3)',fontSize:'.875rem'}}>Full operational overview · {fmt.date(new Date(selectedDate))}</p></div>
+        <div><h1 style={{fontSize:'1.4rem',marginBottom:3}}>AGM Dashboard</h1><p style={{color:'var(--text-3)',fontSize:'.875rem'}}>Assistant General Manager Overview · {fmt.date(new Date(selectedDate))}</p></div>
         <div style={{display:'flex',alignItems:'center',gap:12}}>
           <input type="date" className="input-sm" style={{borderRadius:8, border:'1px solid var(--border)', padding:'4px 8px'}} value={selectedDate} onChange={e => setSelectedDate(e.target.value)} />
-          <div style={{display:'flex',alignItems:'center',gap:6,background:'var(--sky-lt)',padding:'6px 14px',borderRadius:20,border:'1.5px solid #bae6fd'}}><Activity size={14} style={{color:'var(--sky)'}}/><span style={{fontSize:'.8125rem',fontWeight:700,color:'var(--sky)'}}>Management Access</span></div>
+          <div style={{display:'flex',alignItems:'center',gap:6,background:'var(--sky-lt)',padding:'6px 14px',borderRadius:20,border:'1.5px solid #bae6fd'}}><Activity size={14} style={{color:'var(--sky)'}}/><span style={{fontSize:'.8125rem',fontWeight:700,color:'var(--sky)'}}>AGM Access</span></div>
         </div>
       </div>
       <div className="stats-grid">

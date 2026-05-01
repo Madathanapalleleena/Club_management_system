@@ -7,10 +7,17 @@ import { roleColor, roleBg, roleLabel, initials } from '../../utils/helpers';
 const NAV = [
   { id:'home',        label:'Dashboard',    path:'/',               icon:LayoutDashboard, roles:null },
   { id:'directors',   label:'Directors',    path:'/directors',      icon:Shield,          roles:['chairman','secretary'] },
-  { id:'procurement', label:'Procurement',  icon:ShoppingCart,      roles:['chairman','secretary','gm','agm','procurement_manager','procurement_assistant'],
+  { id:'procurement', label:'Procurement',  icon:ShoppingCart,      roles:['chairman','secretary','gm','agm','director','procurement_manager','procurement_assistant'],
     children:[{label:'Dashboard',path:'/procurement'},{label:'Requirements',path:'/procurement/requests'},{label:'Vendors',path:'/procurement/vendors'},{label:'Purchase Orders',path:'/procurement/orders'},{label:'Order Tracking',path:'/procurement/tracking'},{label:'Quality & GRC',path:'/procurement/quality'}] },
-  { id:'store',       label:'Store',        icon:Package,           roles:['chairman','secretary','gm','agm','store_manager','store_assistant','procurement_manager'],
-    children:[{label:'Dashboard',path:'/store'},{label:'Inventory',path:'/store/inventory'},{label:'GRC',path:'/store/grc'},{label:'Internal Requests',path:'/store/requests'},{label:'Order Tracking',path:'/store/tracking'},{label:'Assistants',path:'/store/assistants',roles:['store_manager']}] },
+  { id:'store',       label:'Store',        icon:Package,           roles:['chairman','secretary','gm','agm','store_manager','store_assistant','procurement_manager','bar_manager','banquet_manager','rooms_manager','sports_manager','maintenance_manager','hr_manager','accounts_manager'],
+    children:[
+      {label:'Dashboard',path:'/store',roles:['chairman','secretary','gm','agm','store_manager','store_assistant','procurement_manager']},
+      {label:'Inventory',path:'/store/inventory',roles:['chairman','secretary','gm','agm','store_manager','store_assistant','procurement_manager']},
+      {label:'GRC',path:'/store/grc',roles:['chairman','secretary','gm','agm','store_manager','store_assistant','procurement_manager']},
+      {label:'Internal Requests',path:'/store/requests'},
+      {label:'Order Tracking',path:'/store/tracking',roles:['chairman','secretary','gm','agm','store_manager','store_assistant','procurement_manager']},
+      {label:'Assistants',path:'/store/assistants',roles:['store_manager']},
+    ] },
 
   { id:'kitchen',     label:'Kitchen',      icon:UtensilsCrossed,   roles:['chairman','secretary','gm','agm','kitchen_manager','food_control'],
     children:[{label:'Dashboard',path:'/kitchen'},{label:'Requests',path:'/kitchen/requests'},{label:'Utilization',path:'/kitchen/utilization'}] },

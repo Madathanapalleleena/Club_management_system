@@ -30,13 +30,13 @@ router.get('/', protect, async (req, res) => {
 // Monthly dashboard stats
 router.get('/stats', protect, async (req, res) => {
   try {
-    const now  = new Date();
-    const from = new Date(now.getFullYear(), now.getMonth(), 1);
-    const to   = new Date(now.getFullYear(), now.getMonth()+1, 0);
+    const d = req.query.date ? new Date(req.query.date) : new Date();
+    const from = new Date(d.getFullYear(), d.getMonth(), 1);
+    const to   = new Date(d.getFullYear(), d.getMonth()+1, 0, 23, 59, 59, 999);
     const [allMonth, upcoming, pendingPay, bySlot] = await Promise.all([
       BanquetBooking.find({ bookingDate: { $gte:from, $lte:to }, status: { $ne:'cancelled' } }),
-      BanquetBooking.find({ bookingDate: { $gte: new Date(), $lte: new Date(Date.now()+7*86400000) }, status:'confirmed' }).sort('bookingDate').limit(6).populate('createdBy','name'),
-      BanquetBooking.find({ paymentStatus: { $in:['due','partial'] }, status: { $ne:'cancelled' }, bookingDate: { $lte: new Date(Date.now()+30*86400000) } }).sort('bookingDate').limit(10),
+      BanquetBooking.find({ bookingDate: { $gte: d, $lte: new Date(d.getTime()+7*86400000) }, status:'confirmed' }).sort('bookingDate').limit(6).populate('createdBy','name'),
+      BanquetBooking.find({ paymentStatus: { $in:['due','partial'] }, status: { $ne:'cancelled' }, bookingDate: { $lte: new Date(d.getTime()+30*86400000) } }).sort('bookingDate').limit(10),
       BanquetBooking.aggregate([{ $match:{ bookingDate:{$gte:from,$lte:to}, status:{$ne:'cancelled'} } }, { $group:{ _id:'$slot', count:{$sum:1} } }]),
     ]);
     const slotMap = { morning:0, afternoon:0, evening:0 };

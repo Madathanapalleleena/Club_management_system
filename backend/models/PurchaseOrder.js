@@ -52,6 +52,26 @@ const schema = new mongoose.Schema({
   paymentUpdatedBy:   { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   paymentUpdatedAt:   { type: Date },
 
+  // High-value PO approval chain (for totalAmount > 50,000)
+  requiresHighValueApproval: { type: Boolean, default: false },
+  hvApprovals: {
+    director: {
+      approved:   { type: Boolean, default: false },
+      approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      approvedAt: { type: Date },
+    },
+    agm: {
+      approved:   { type: Boolean, default: false },
+      approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      approvedAt: { type: Date },
+    },
+    gm: {
+      approved:   { type: Boolean, default: false },
+      approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      approvedAt: { type: Date },
+    },
+  },
+
   // Order lifecycle
   orderStatus:        { type: String, enum: ['draft','approved','dispatched','delivered','cancelled'], default: 'draft' },
   approvedBy:         { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

@@ -71,6 +71,7 @@ export const storeAPI = {
   items: p => api.get('/store/items', { params: p }),
   getItem: id => api.get('/store/items/' + id),
   createItem: d => api.post('/store/items', d),
+  bulkUpsertItems: d => api.post('/store/items/bulk-upsert', d),
   updateItem: (id,d) => api.put('/store/items/' + id, d),
   deleteItem: id => api.delete('/store/items/' + id),
   adjust: (id,d) => api.post('/store/items/' + id + '/adjust', d),
@@ -103,7 +104,7 @@ export const banquetAPI = {
   checkAvailability: d => api.post('/banquet/check-availability', d),
   calendar: (y,m) => api.get('/banquet/calendar/' + y + '/' + m),
   stats: () => api.get('/banquet/stats'),
-  monthlyStats: () => api.get('/banquet/stats'),
+  monthlyStats: (date) => api.get('/banquet/stats', { params: { date } }),
   runAlerts:    () => api.post('/banquet/run-alerts'),
   runReminders: () => api.post('/banquet/run-reminders'),
 };
@@ -119,7 +120,7 @@ export const roomsAPI = {
   createBooking: d => api.post('/rooms/bookings', d),
   updateBooking: (id,d) => api.put('/rooms/bookings/' + id, d),
   cancelBooking: id => api.put('/rooms/bookings/' + id, { action: 'cancel' }),
-  stats: () => api.get('/rooms/stats'),
+  stats: (date) => api.get('/rooms/stats', { params: { date } }),
 };
 
 export const finAPI = {
@@ -146,14 +147,14 @@ export const notifAPI = {
 };
 
 export const dashAPI = {
-  chairman:   () => api.get('/dashboard/chairman'),
-  gm:         () => api.get('/dashboard/gm'),
-  procurement:() => api.get('/dashboard/procurement'),
-  store:      () => api.get('/dashboard/store'),
-  kitchen:    () => api.get('/dashboard/kitchen'),
-  banquet:    () => api.get('/dashboard/banquet'),
-  rooms:      () => api.get('/dashboard/rooms'),
-  accounts:   () => api.get('/dashboard/accounts'),
-  hr:         () => api.get('/dashboard/hr'),
-  department: d => api.get('/dashboard/department/' + d),
+  chairman:   (date) => api.get('/dashboard/chairman', { params: { date } }),
+  gm:         (date) => api.get('/dashboard/gm', { params: { date } }),
+  procurement:(date) => api.get('/dashboard/procurement', { params: { date } }),
+  store:      (date) => api.get('/dashboard/store', { params: { date } }),
+  kitchen:    (date) => api.get('/dashboard/kitchen', { params: { date } }),
+  banquet:    (date) => api.get('/dashboard/banquet', { params: { date } }),
+  rooms:      (date) => api.get('/dashboard/rooms', { params: { date } }),
+  accounts:   (date) => api.get('/dashboard/accounts', { params: { date } }),
+  hr:         (date) => api.get('/dashboard/hr', { params: { date } }),
+  department: (d, date) => api.get('/dashboard/department/' + d, { params: { date } }),
 };

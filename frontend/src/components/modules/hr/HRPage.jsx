@@ -146,7 +146,7 @@ export default function HRPage() {
       >
         <div className="form-row cols-2">
           <FG label="Full Name" required><input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} /></FG>
-          <FG label="Mobile"><input value={form.mobile} onChange={e=>setForm({...form,mobile:e.target.value})} placeholder="10-digit number" /></FG>
+          <FG label="Mobile"><input type="tel" maxLength={10} pattern="\d{10}" onKeyPress={e=>!/[0-9]/.test(e.key)&&e.preventDefault()} value={form.mobile} onChange={e=>setForm({...form,mobile:e.target.value})} placeholder="10-digit number" /></FG>
         </div>
         <FG label="Email Address" required><input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} /></FG>
         <FG label="Password" required><input type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="Min 8 characters" /></FG>

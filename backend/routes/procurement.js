@@ -23,7 +23,17 @@ router.get('/requests', protect, async (req, res) => {
     if (req.query.status)     f.status     = req.query.status;
     if (req.query.department) f.department = req.query.department;
     if (req.query.priority)   f.priority   = req.query.priority;
-    if (!PROC.includes(req.user.role)) f.requestedBy = req.user._id;
+    if (!PROC.includes(req.user.role)) {
+      if (req.user.role === 'director') {
+        let deptQuery = req.user.department;
+        if (deptQuery === 'food_committee') deptQuery = { $in: ['kitchen', 'bar', 'restaurant', 'food_committee'] };
+        else if (deptQuery === 'rooms_banquets') deptQuery = { $in: ['rooms', 'banquet', 'rooms_banquets'] };
+        else if (deptQuery === 'general') deptQuery = { $in: ['management', 'procurement', 'store', 'accounts', 'hr', 'maintenance', 'general'] };
+        f.department = deptQuery;
+      } else {
+        f.requestedBy = req.user._id;
+      }
+    }
     const docs = await PReq.find(f)
       .populate('requestedBy','name role department')
       .populate('approvedBy','name role')
@@ -244,6 +254,16 @@ router.get('/purchase-orders', protect, async (req, res) => {
     if (req.query.vendor)        f.vendor        = req.query.vendor;
     if (req.query.from)          f.createdAt = { ...f.createdAt, $gte: new Date(req.query.from) };
     if (req.query.to)            f.createdAt = { ...f.createdAt, $lte: new Date(req.query.to) };
+    
+    // Director sees only high-value POs for their department
+    if (req.user.role === 'director') {
+      let deptQuery = req.user.department;
+      if (deptQuery === 'food_committee') deptQuery = { $in: ['kitchen', 'bar', 'restaurant', 'food_committee'] };
+      else if (deptQuery === 'rooms_banquets') deptQuery = { $in: ['rooms', 'banquet', 'rooms_banquets'] };
+      else if (deptQuery === 'general') deptQuery = { $in: ['management', 'procurement', 'store', 'accounts', 'hr', 'maintenance', 'general'] };
+      f.department = deptQuery;
+      f.totalAmount = { $gte: 50000 };
+    }
     const orders = await PO.find(f)
       .populate('vendor','name shopName vendorType')
       .populate('createdBy','name role')
@@ -254,6 +274,9 @@ router.get('/purchase-orders', protect, async (req, res) => {
       .populate('grcUploadedBy','name role')
       .populate('linkedRequest','requestNumber department')
       .populate('changeLog.performedBy','name role')
+      .populate('hvApprovals.director.approvedBy','name role')
+      .populate('hvApprovals.agm.approvedBy','name role')
+      .populate('hvApprovals.gm.approvedBy','name role')
       .sort('-createdAt');
     res.json(orders);
   } catch (e) { res.status(500).json({ message: e.message }); }
@@ -270,7 +293,10 @@ router.get('/purchase-orders/:id', protect, async (req, res) => {
       .populate('billUploadedBy','name role')
       .populate('grcUploadedBy','name role')
       .populate('linkedRequest')
-      .populate('changeLog.performedBy','name role');
+      .populate('changeLog.performedBy','name role')
+      .populate('hvApprovals.director.approvedBy','name role')
+      .populate('hvApprovals.agm.approvedBy','name role')
+      .populate('hvApprovals.gm.approvedBy','name role');
     if (!po) return res.status(404).json({ message: 'PO not found' });
     res.json(po);
   } catch (e) { res.status(500).json({ message: e.message }); }
@@ -278,12 +304,27 @@ router.get('/purchase-orders/:id', protect, async (req, res) => {
 
 router.post('/purchase-orders', protect, async (req, res) => {
   try {
-    const po = await PO.create({ ...req.body, createdBy: req.user._id });
+    const body = { ...req.body, createdBy: req.user._id };
+    // Flag high-value POs (>50,000) for multi-level approval
+    const totalAmt = (req.body.items || []).reduce((s, i) => s + (parseFloat(i.quantity || 0) * parseFloat(i.unitPrice || 0)), 0);
+    if (totalAmt > 50000) body.requiresHighValueApproval = true;
+
+    const po = await PO.create(body);
+
     if (po.linkedRequest) {
       const r = await PReq.findById(po.linkedRequest);
       if (r) { r.status = 'po_raised'; r.linkedPO = po._id; r.changeLog.push({ action:'po_raised', note:`PO ${po.poNumber} created by ${req.user.name}`, performedBy: req.user._id }); await r.save(); }
     }
-    await Notif.notifyRoles(['gm','chairman','secretary','accounts_manager'], 'Purchase Order Created', `${po.poNumber} — ${po.department}, ${po.items.length} items, ₹${po.totalAmount}`, 'info', po._id, 'procurement');
+
+    if (po.requiresHighValueApproval) {
+      const deptMap = { kitchen:'kitchen_manager', bar:'bar_manager', restaurant:'food_control', rooms:'rooms_manager', banquet:'banquet_manager', sports:'sports_manager', store:'store_manager', maintenance:'maintenance_manager', hr:'hr_manager', accounts:'accounts_manager' };
+      const deptRole = deptMap[po.department] || null;
+      const notifyRoles = ['agm', 'gm', 'chairman', 'secretary', 'accounts_manager'];
+      if (deptRole) notifyRoles.push(deptRole);
+      await Notif.notifyRoles(notifyRoles, '🔴 High Value PO — Multi-Level Approval Required', `${po.poNumber} ₹${po.totalAmount.toLocaleString('en-IN')} (${po.department}) requires Director + AGM + GM approval`, 'alert', po._id, 'procurement');
+    } else {
+      await Notif.notifyRoles(['gm','chairman','secretary','accounts_manager'], 'Purchase Order Created', `${po.poNumber} — ${po.department}, ${po.items.length} items, ₹${po.totalAmount}`, 'info', po._id, 'procurement');
+    }
     res.status(201).json(po);
   } catch (e) { res.status(500).json({ message: e.message }); }
 });
@@ -295,9 +336,39 @@ router.put('/purchase-orders/:id', protect, async (req, res) => {
     const { action, note, ...data } = req.body;
     const log = { performedBy: req.user._id, performedAt: new Date() };
 
-    if (action === 'approve') {
+    if (action === 'hv_approve') {
+      // High-value PO multi-level approval (>₹50,000)
+      if (!po.requiresHighValueApproval)
+        return res.status(400).json({ message: 'This PO does not require high-value approval' });
+      const role = req.user.role;
+      if (['gm','chairman','secretary'].includes(role)) {
+        po.hvApprovals.gm = { approved: true, approvedBy: req.user._id, approvedAt: new Date() };
+        log.action = 'hv_gm_approved'; log.note = `GM approval by ${req.user.name}`;
+      } else if (role === 'agm') {
+        po.hvApprovals.agm = { approved: true, approvedBy: req.user._id, approvedAt: new Date() };
+        log.action = 'hv_agm_approved'; log.note = `AGM approval by ${req.user.name}`;
+      } else {
+        po.hvApprovals.director = { approved: true, approvedBy: req.user._id, approvedAt: new Date() };
+        log.action = 'hv_director_approved'; log.note = `Director approval by ${req.user.name}`;
+      }
+      po.changeLog.push({ ...log, performedBy: req.user._id, performedAt: new Date() });
+      // Auto-approve when all three levels done
+      if (po.hvApprovals.director?.approved && po.hvApprovals.agm?.approved && po.hvApprovals.gm?.approved) {
+        po.orderStatus = 'approved'; po.approvedBy = req.user._id; po.approvedAt = new Date();
+        const vendor = await Vendor.findById(po.vendor).select('shopName');
+        await Promise.all([
+          Notif.notifyRoles(['store_manager','store_assistant','procurement_manager','procurement_assistant'], '✅ High Value PO Fully Approved', `${po.poNumber} ₹${po.totalAmount} — all 3 approvals received`, 'success', po._id, 'procurement'),
+          Notif.notifyRoles(['accounts_manager'], 'High Value PO Approved — Payment Required', `${po.poNumber} | Vendor: ${vendor?.shopName||'—'} | ₹${po.totalAmount}`, 'alert', po._id, 'procurement'),
+        ]);
+      }
+      await po.save();
+      return res.json(po);
+
+    } else if (action === 'approve') {
       if (!['gm','agm','chairman','secretary'].includes(req.user.role))
         return res.status(403).json({ message: 'Only GM / AGM can approve a PO' });
+      if (po.requiresHighValueApproval)
+        return res.status(403).json({ message: 'High-value PO (>₹50,000) requires Director + AGM + GM approval via the approval chain' });
       po.orderStatus = 'approved'; po.approvedBy = req.user._id; po.approvedAt = new Date();
       log.action = 'approved'; log.note = `Approved by ${req.user.name} (${req.user.role})`;
 

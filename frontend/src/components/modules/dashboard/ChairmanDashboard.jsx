@@ -8,17 +8,27 @@ import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, R
 export default function ChairmanDashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoad] = useState(true);
-  useEffect(() => { dashAPI.chairman().then(r=>setData(r.data)).finally(()=>setLoad(false)); }, []);
-  if (loading) return <LoadingPage text="Loading supervision dashboard..."/>;
-  const { directors=[], monthly=[], pnl=[], deptBreakdown=[], storeSummary={}, pendingReqs=0, pendingPOs=0 } = data;
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+
+  useEffect(() => { 
+    setLoad(true);
+    dashAPI.chairman(selectedDate).then(r=>setData(r.data)).finally(()=>setLoad(false)); 
+  }, [selectedDate]);
+
+  if (loading && !data) return <LoadingPage text="Loading supervision dashboard..."/>;
+  const { directors=[], monthly=[], pnl=[], deptBreakdown=[], storeSummary={}, pendingReqs=0, pendingPOs=0 } = data || {};
   const rev  = monthly.reduce((s,m)=>s+m.sales,0);
   const exp  = monthly.reduce((s,m)=>s+m.expenses,0);
   const deptC = d => ({ food_committee:'#d97706', sports:'#15803d', rooms_banquets:'#1d4ed8', general:'#6b7280' }[d]||'#6b7280');
+  
   return (
     <div className="page-body">
       <div className="flex items-center justify-between">
-        <div><h1 style={{fontSize:'1.4rem',marginBottom:3}}>Supervision Dashboard</h1><p style={{color:'var(--text-3)',fontSize:'.875rem'}}>{fmt.date(new Date())} — Full organisational overview</p></div>
-        <div style={{display:'flex',alignItems:'center',gap:6,background:'var(--amber-lt)',padding:'6px 14px',borderRadius:20,border:'1.5px solid #fde68a'}}><Star size={14} style={{color:'var(--amber)'}} fill="var(--amber)"/><span style={{fontSize:'.8125rem',fontWeight:700,color:'var(--amber)'}}>Supervision Access</span></div>
+        <div><h1 style={{fontSize:'1.4rem',marginBottom:3}}>Supervision Dashboard</h1><p style={{color:'var(--text-3)',fontSize:'.875rem'}}>{fmt.date(new Date(selectedDate))} — Full organisational overview</p></div>
+        <div style={{display:'flex',alignItems:'center',gap:12}}>
+          <input type="date" className="input-sm" style={{borderRadius:8, border:'1px solid var(--border)', padding:'4px 8px'}} value={selectedDate} onChange={e => setSelectedDate(e.target.value)} />
+          <div style={{display:'flex',alignItems:'center',gap:6,background:'var(--amber-lt)',padding:'6px 14px',borderRadius:20,border:'1.5px solid #fde68a'}}><Star size={14} style={{color:'var(--amber)'}} fill="var(--amber)"/><span style={{fontSize:'.8125rem',fontWeight:700,color:'var(--amber)'}}>Supervision Access</span></div>
+        </div>
       </div>
       <div className="stats-grid">
         <Stat label="30-Day Revenue"  value={fmt.inr(rev)}  color="var(--sky)"    icon={TrendingUp}   sub="All departments"/>

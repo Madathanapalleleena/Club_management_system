@@ -14,18 +14,18 @@ function KitchenRequestsTab() {
   const [reqs, setReqs]    = useState([]);
   const [loading, setLoad] = useState(true);
   const [modal, setModal]  = useState(false);
-  const [form, setForm]    = useState({ priority:'medium', notes:'', items:[{itemName:'',quantity:'',unit:'kg',category:'',estimatedPrice:''}] });
+  const [form, setForm]    = useState({ priority:'medium', notes:'', items:[{itemName:'',quantity:'',unit:'kg',category:''}] });
 
   const load = () => { setLoad(true); kitchenAPI.requests().then(r=>setReqs(r.data)).finally(()=>setLoad(false)); };
   useEffect(()=>{load();},[]);
 
-  const addRow    = () => setForm(f=>({...f,items:[...f.items,{itemName:'',quantity:'',unit:'kg',category:'',estimatedPrice:''}]}));
+  const addRow    = () => setForm(f=>({...f,items:[...f.items,{itemName:'',quantity:'',unit:'kg',category:''}]}));
   const removeRow = i  => setForm(f=>({...f,items:f.items.filter((_,x)=>x!==i)}));
   const setItem   = (i,k,v) => setForm(f=>({...f,items:f.items.map((it,x)=>x===i?{...it,[k]:v}:it)}));
 
   const save = async () => {
     if(!form.items[0].itemName) return toast.error('Add at least one item');
-    try { await kitchenAPI.createRequest(form); toast.success('Request raised'); load(); setModal(false); setForm({priority:'medium',notes:'',items:[{itemName:'',quantity:'',unit:'kg',category:'',estimatedPrice:''}]}); }
+    try { await kitchenAPI.createRequest(form); toast.success('Request raised'); load(); setModal(false); setForm({priority:'medium',notes:'',items:[{itemName:'',quantity:'',unit:'kg',category:''}]}); }
     catch(e) { toast.error(e.response?.data?.message||'Failed'); }
   };
 
@@ -74,12 +74,11 @@ function KitchenRequestsTab() {
             <button className="btn btn-subtle btn-sm" onClick={addRow}><Plus size={12}/>Add</button>
           </div>
           {form.items.map((it,i)=>(
-            <div key={i} style={{display:'grid',gridTemplateColumns:'2fr 1fr 0.7fr 0.7fr 1fr 28px',gap:6,marginBottom:6}}>
+            <div key={i} style={{display:'grid',gridTemplateColumns:'2fr 1fr 0.7fr 0.7fr 28px',gap:6,marginBottom:6}}>
               <input placeholder="Item name *" value={it.itemName} onChange={e=>setItem(i,'itemName',e.target.value)} />
               <input placeholder="Category" value={it.category} onChange={e=>setItem(i,'category',e.target.value)} />
               <input placeholder="Qty" type="number" value={it.quantity} onChange={e=>setItem(i,'quantity',e.target.value)} />
               <select value={it.unit} onChange={e=>setItem(i,'unit',e.target.value)}>{UNITS.map(u=><option key={u} value={u}>{u}</option>)}</select>
-              <input placeholder="Est. ₹" type="number" value={it.estimatedPrice} onChange={e=>setItem(i,'estimatedPrice',e.target.value)} />
               <button className="btn btn-icon btn-ghost btn-sm" onClick={()=>removeRow(i)} disabled={form.items.length===1}><Trash2 size={12} style={{color:'var(--red)'}}/></button>
             </div>
           ))}

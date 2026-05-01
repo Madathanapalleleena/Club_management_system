@@ -5,19 +5,26 @@ import { Stat, LoadingPage, ChartTip, SectionCard } from '../../ui';
 import { TrendingUp, TrendingDown, Wine, Building2, Trophy, Wrench, Package } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
+import { useAuth } from '../../../contexts/AuthContext';
+
 const META = {
-  bar:         { label:'Bar & Liquor',    icon:Wine,      color:'#b45309' },
-  banquet:     { label:'Banquet',         icon:Building2, color:'#0f766e' },
-  rooms:       { label:'Rooms & Hotel',   icon:Building2, color:'#1d4ed8' },
-  sports:      { label:'Sports',          icon:Trophy,    color:'#15803d' },
-  maintenance: { label:'Maintenance',     icon:Wrench,    color:'#374151' },
+  bar:            { label:'Bar & Liquor',    icon:Wine,      color:'#b45309' },
+  banquet:        { label:'Banquet',         icon:Building2, color:'#0f766e' },
+  rooms:          { label:'Rooms & Hotel',   icon:Building2, color:'#1d4ed8' },
+  sports:         { label:'Sports',          icon:Trophy,    color:'#15803d' },
+  maintenance:    { label:'Maintenance',     icon:Wrench,    color:'#374151' },
+  food_committee: { label:'Food Committee',  icon:Package,   color:'#059669' },
+  general:        { label:'General',         icon:Building2, color:'#4f46e5' },
 };
 
-export function DepartmentDashboard({ dept }) {
+export default function DirectorDashboard() {
+  const { user } = useAuth();
+  const dept = user?.department || 'general';
+  
   const [data, setData] = useState(null);
   const [loading, setLoad] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const meta = META[dept] || { label:dept, icon:Package, color:'var(--indigo)' };
+  const meta = META[dept] || { label:dept.replace(/_/g, ' '), icon:Package, color:'var(--indigo)' };
   const Icon = meta.icon;
 
   useEffect(() => { 
@@ -33,7 +40,10 @@ export function DepartmentDashboard({ dept }) {
       <div className="flex items-center justify-between" style={{marginBottom:4}}>
         <div style={{display:'flex',alignItems:'center',gap:12}}>
           <div style={{width:42,height:42,borderRadius:12,background:meta.color+'18',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon size={20} style={{color:meta.color}}/></div>
-          <div><h1 style={{fontSize:'1.4rem',marginBottom:2}}>{meta.label} Dashboard</h1><p style={{color:'var(--text-3)',fontSize:'.875rem'}}>Metrics up to · {fmt.date(new Date(selectedDate))}</p></div>
+          <div>
+            <h1 style={{fontSize:'1.4rem',marginBottom:2}}>{meta.label} Director Dashboard</h1>
+            <p style={{color:'var(--text-3)',fontSize:'.875rem'}}>Metrics up to · {fmt.date(new Date(selectedDate))}</p>
+          </div>
         </div>
         <div>
           <input type="date" className="input-sm" style={{borderRadius:8, border:'1px solid var(--border)', padding:'4px 8px'}} value={selectedDate} onChange={e => setSelectedDate(e.target.value)} />

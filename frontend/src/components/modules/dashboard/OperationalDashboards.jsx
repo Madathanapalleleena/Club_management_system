@@ -10,12 +10,16 @@ import toast from 'react-hot-toast';
 export function ProcurementDashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoad] = useState(true);
-  useEffect(() => { dashAPI.procurement().then(r=>setData(r.data)).finally(()=>setLoad(false)); }, []);
-  if (loading) return <LoadingPage/>;
-  const { stats={}, recentReqs=[], recentPOs=[] } = data;
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  useEffect(() => { setLoad(true); dashAPI.procurement(selectedDate).then(r=>setData(r.data)).finally(()=>setLoad(false)); }, [selectedDate]);
+  if (loading && !data) return <LoadingPage/>;
+  const { stats={}, recentReqs=[], recentPOs=[] } = data || {};
   return (
     <div className="page-body">
-      <div><h1 style={{fontSize:'1.4rem',marginBottom:3}}>Procurement Dashboard</h1><p style={{color:'var(--text-3)',fontSize:'.875rem'}}>{fmt.date(new Date())}</p></div>
+      <div className="flex items-center justify-between" style={{marginBottom:10}}>
+        <div><h1 style={{fontSize:'1.4rem',marginBottom:3}}>Procurement Dashboard</h1><p style={{color:'var(--text-3)',fontSize:'.875rem'}}>Metrics up to · {fmt.date(new Date(selectedDate))}</p></div>
+        <div><input type="date" className="input-sm" style={{borderRadius:8, border:'1px solid var(--border)', padding:'4px 8px'}} value={selectedDate} onChange={e => setSelectedDate(e.target.value)} /></div>
+      </div>
       <div className="stats-grid">
         <Stat label="Pending Requests"  value={stats.pReqPending||0}   color="var(--amber)"   icon={Clock}         sub="Awaiting approval"/>
         <Stat label="Approved Requests" value={stats.pReqApproved||0}  color="var(--emerald)" icon={CheckCircle}   sub="Ready for PO"/>
@@ -46,12 +50,16 @@ export function ProcurementDashboard() {
 export function StoreDashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoad] = useState(true);
-  useEffect(() => { dashAPI.store().then(r=>setData(r.data)).finally(()=>setLoad(false)); }, []);
-  if (loading) return <LoadingPage/>;
-  const { summary={}, lowItems=[], expiringItems=[], recentRequests=[] } = data;
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  useEffect(() => { setLoad(true); dashAPI.store(selectedDate).then(r=>setData(r.data)).finally(()=>setLoad(false)); }, [selectedDate]);
+  if (loading && !data) return <LoadingPage/>;
+  const { summary={}, lowItems=[], expiringItems=[], recentRequests=[] } = data || {};
   return (
     <div className="page-body">
-      <div><h1 style={{fontSize:'1.4rem',marginBottom:3}}>Store Dashboard</h1><p style={{color:'var(--text-3)',fontSize:'.875rem'}}>Inventory overview · {fmt.date(new Date())}</p></div>
+      <div className="flex items-center justify-between" style={{marginBottom:10}}>
+        <div><h1 style={{fontSize:'1.4rem',marginBottom:3}}>Store Dashboard</h1><p style={{color:'var(--text-3)',fontSize:'.875rem'}}>Inventory overview up to · {fmt.date(new Date(selectedDate))}</p></div>
+        <div><input type="date" className="input-sm" style={{borderRadius:8, border:'1px solid var(--border)', padding:'4px 8px'}} value={selectedDate} onChange={e => setSelectedDate(e.target.value)} /></div>
+      </div>
       <div className="stats-grid">
         <Stat label="Total Items"    value={summary.total||0}        color="var(--text-1)"/>
         <Stat label="Adequate"       value={summary.adequate||0}     color="var(--emerald)" icon={CheckCircle}/>
@@ -82,12 +90,16 @@ export function StoreDashboard() {
 export function KitchenDashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoad] = useState(true);
-  useEffect(() => { dashAPI.kitchen().then(r=>setData(r.data)).finally(()=>setLoad(false)); }, []);
-  if (loading) return <LoadingPage/>;
-  const { stats={}, recentReqs=[], utilization=[] } = data;
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  useEffect(() => { setLoad(true); dashAPI.kitchen(selectedDate).then(r=>setData(r.data)).finally(()=>setLoad(false)); }, [selectedDate]);
+  if (loading && !data) return <LoadingPage/>;
+  const { stats={}, recentReqs=[], utilization=[] } = data || {};
   return (
     <div className="page-body">
-      <div><h1 style={{fontSize:'1.4rem',marginBottom:3}}>Kitchen Dashboard</h1><p style={{color:'var(--text-3)',fontSize:'.875rem'}}>{fmt.date(new Date())}</p></div>
+      <div className="flex items-center justify-between" style={{marginBottom:10}}>
+        <div><h1 style={{fontSize:'1.4rem',marginBottom:3}}>Kitchen Dashboard</h1><p style={{color:'var(--text-3)',fontSize:'.875rem'}}>Metrics up to · {fmt.date(new Date(selectedDate))}</p></div>
+        <div><input type="date" className="input-sm" style={{borderRadius:8, border:'1px solid var(--border)', padding:'4px 8px'}} value={selectedDate} onChange={e => setSelectedDate(e.target.value)} /></div>
+      </div>
       <div className="stats-grid">
         <Stat label="Total Requests"   value={stats.total||0}   color="var(--text-1)"/>
         <Stat label="Pending Approval" value={stats.pending||0} color="var(--amber)" icon={Clock} sub="Awaiting store"/>
@@ -113,11 +125,12 @@ const PAY_STATUSES = ['pending','advance','paid','stopped'];
 export function AccountsDashboard() {
   const [data, setData]       = useState(null);
   const [loading, setLoad]    = useState(true);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [payModal, setPayModal] = useState(null);
   const [payForm, setPayForm] = useState({ paymentStatus:'pending', advanceAmount:'', paymentMode:'cash' });
 
-  const load = () => { setLoad(true); dashAPI.accounts().then(r=>setData(r.data)).finally(()=>setLoad(false)); };
-  useEffect(() => { load(); }, []);
+  const load = () => { setLoad(true); dashAPI.accounts(selectedDate).then(r=>setData(r.data)).finally(()=>setLoad(false)); };
+  useEffect(() => { load(); }, [selectedDate]);
 
   const openPay = po => {
     setPayModal(po);
@@ -133,12 +146,15 @@ export function AccountsDashboard() {
     } catch { toast.error('Failed to update payment'); }
   };
 
-  if (loading) return <LoadingPage/>;
-  const { monthly=[], pnl=[], pendingPaymentsPO=[] } = data;
+  if (loading && !data) return <LoadingPage/>;
+  const { monthly=[], pnl=[], pendingPaymentsPO=[] } = data || {};
   const rev=monthly.reduce((s,m)=>s+m.sales,0), exp=monthly.reduce((s,m)=>s+m.expenses,0);
   return (
     <div className="page-body">
-      <div><h1 style={{fontSize:'1.4rem',marginBottom:3}}>Accounts Dashboard</h1><p style={{color:'var(--text-3)',fontSize:'.875rem'}}>{fmt.date(new Date())}</p></div>
+      <div className="flex items-center justify-between" style={{marginBottom:10}}>
+        <div><h1 style={{fontSize:'1.4rem',marginBottom:3}}>Accounts Dashboard</h1><p style={{color:'var(--text-3)',fontSize:'.875rem'}}>Metrics up to · {fmt.date(new Date(selectedDate))}</p></div>
+        <div><input type="date" className="input-sm" style={{borderRadius:8, border:'1px solid var(--border)', padding:'4px 8px'}} value={selectedDate} onChange={e => setSelectedDate(e.target.value)} /></div>
+      </div>
       <div className="stats-grid">
         <Stat label="30-Day Revenue"      value={fmt.inr(rev)}       color="var(--sky)"     icon={TrendingUp}/>
         <Stat label="30-Day Expenses"     value={fmt.inr(exp)}       color="var(--amber)"   icon={TrendingDown}/>
@@ -209,12 +225,16 @@ export function AccountsDashboard() {
 export function HRDashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoad] = useState(true);
-  useEffect(() => { dashAPI.hr().then(r=>setData(r.data)).finally(()=>setLoad(false)); }, []);
-  if (loading) return <LoadingPage/>;
-  const { stats={}, byDept=[], recentStaff=[] } = data;
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  useEffect(() => { setLoad(true); dashAPI.hr(selectedDate).then(r=>setData(r.data)).finally(()=>setLoad(false)); }, [selectedDate]);
+  if (loading && !data) return <LoadingPage/>;
+  const { stats={}, byDept=[], recentStaff=[] } = data || {};
   return (
     <div className="page-body">
-      <div><h1 style={{fontSize:'1.4rem',marginBottom:3}}>HR Dashboard</h1><p style={{color:'var(--text-3)',fontSize:'.875rem'}}>{fmt.date(new Date())}</p></div>
+      <div className="flex items-center justify-between" style={{marginBottom:10}}>
+        <div><h1 style={{fontSize:'1.4rem',marginBottom:3}}>HR Dashboard</h1><p style={{color:'var(--text-3)',fontSize:'.875rem'}}>Metrics up to · {fmt.date(new Date(selectedDate))}</p></div>
+        <div><input type="date" className="input-sm" style={{borderRadius:8, border:'1px solid var(--border)', padding:'4px 8px'}} value={selectedDate} onChange={e => setSelectedDate(e.target.value)} /></div>
+      </div>
       <div className="stats-grid">
         <Stat label="Total Staff" value={stats.total||0} color="var(--text-1)" icon={Users}/>
         <Stat label="Active"      value={stats.active||0} color="var(--emerald)"/>

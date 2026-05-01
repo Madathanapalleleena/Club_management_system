@@ -10,6 +10,7 @@ import { Modal, FG, PageHdr, Empty, Tabs, ChangeLog } from '../../ui';
 import toast from 'react-hot-toast';
 
 const DEPTS = ['kitchen','bar','restaurant','rooms','banquet','sports','store','maintenance','hr','accounts','management'];
+const DEPTS_NO_STORE = DEPTS.filter(d => d !== 'store');
 const UNITS = ['kg','g','litre','ml','pcs','box','can','bottle','packet','roll','cylinder','bag','dozen','set','pair'];
 const VENDOR_TYPES = ['wholesale','retailer','distributor'];
 const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
@@ -241,7 +242,7 @@ function RequirementsTab({ user }) {
         <div className="form-row cols-2">
           <FG label="Department" required>
             <select value={form.department} onChange={e=>setForm({...form,department:e.target.value})}>
-              {DEPTS.map(d=><option key={d} value={d}>{cap(d)}</option>)}
+              {DEPTS_NO_STORE.map(d=><option key={d} value={d}>{cap(d)}</option>)}
             </select>
           </FG>
           <FG label="Priority">
@@ -469,8 +470,8 @@ function VendorsTab() {
               <input value={form.address} onChange={e=>setForm({...form,address:e.target.value})} placeholder="Full shop / business address"/>
             </FG>
             <div className="form-row cols-2">
-              <FG label="Mobile"><input value={form.mobile} onChange={e=>setForm({...form,mobile:e.target.value})} placeholder="10-digit mobile"/></FG>
-              <FG label="Email"><input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/></FG>
+              <FG label="Mobile"><input type="tel" maxLength={10} pattern="\d{10}" onKeyPress={e=>!/[0-9]/.test(e.key)&&e.preventDefault()} value={form.mobile} onChange={e=>setForm({...form,mobile:e.target.value})} placeholder="10-digit mobile"/></FG>
+              <FG label="Email"><input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="Email"/></FG>
             </div>
             <div className="form-row cols-3">
               <FG label="Vendor Type" required>
@@ -756,7 +757,7 @@ Available placeholders:
 // ────────────────────────────────────────────────────────────────────
 // SECTION 3 – PURCHASE ORDERS
 // ────────────────────────────────────────────────────────────────────
-function PurchaseOrdersTab() {
+function PurchaseOrdersTab({ user }) {
   const [orders,     setOrders]   = useState([]);
   const [vendors,    setVendors]  = useState([]);
   const [storeItems, setStoreItems] = useState([]);
@@ -768,6 +769,7 @@ function PurchaseOrdersTab() {
   const [payModal,   setPayModal] = useState(null);
   const [payForm,    setPayForm]  = useState({paymentStatus:'pending',advanceAmount:''});
   const [itemSearch, setItemSearch] = useState([]);
+  const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({department:'kitchen',vendor:'',expectedDelivery:'',notes:'',items:[{itemId:'',itemName:'',category:'',quantity:'',unit:'kg',unitPrice:''}]});
 
   const load = useCallback(()=>{
@@ -807,10 +809,13 @@ function PurchaseOrdersTab() {
   const total = form.items.reduce((s,i)=>s+(parseFloat(i.quantity||0)*parseFloat(i.unitPrice||0)),0);
 
   const savePO = async ()=>{
+    if(submitting) return;
     if(!form.vendor) return toast.error('Select a vendor');
     if(!form.items[0].itemName) return toast.error('Add at least one item');
+    setSubmitting(true);
     try { await procAPI.createPO({...form,totalAmount:total}); toast.success('Purchase Order created'); load(); setModal(false); setItemSearch([]); }
     catch(e){ toast.error(e.response?.data?.message||'Failed'); }
+    finally { setSubmitting(false); }
   };
 
   const doAction = async (id,action,extra={})=>{
@@ -862,13 +867,23 @@ function PurchaseOrdersTab() {
         <div className="card" style={{padding:0,overflow:'hidden'}}>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>PO Number</th><th>Vendor</th><th>Dept</th><th>Amount</th><th>Payment</th><th>Order Status</th><th>Delivery</th><th>Bill</th><th>GRC</th><th>Created By</th><th>Approved By</th><th></th></tr></thead>
+              <thead><tr>
+                <th style={{position:'sticky',left:0,background:'var(--white)',zIndex:2}}></th>
+                <th>PO Number</th><th>Vendor</th><th>Dept</th><th>Amount</th><th>Payment</th><th>Order Status</th><th>Delivery</th><th>Bill</th><th>GRC</th><th>Created By</th>
+              </tr></thead>
               <tbody>
                 {filtered.map(po=>{
                   const ob=orderBadge(po.orderStatus),pb=payBadge(po.paymentStatus);
+                  const isHV = po.requiresHighValueApproval;
                   return (
                     <tr key={po._id}>
-                      <td className="font-mono" style={{color:'var(--indigo)',fontWeight:700,fontSize:'.8rem'}}>{po.poNumber}</td>
+                      <td style={{position:'sticky',left:0,background:'var(--white)',zIndex:1,padding:'6px 8px'}}>
+                        <button className="btn btn-icon btn-ghost btn-sm" onClick={()=>openDetail(po._id)} title="View Details"><Eye size={13}/></button>
+                      </td>
+                      <td>
+                        <div className="font-mono" style={{color:'var(--indigo)',fontWeight:700,fontSize:'.8rem'}}>{po.poNumber}</div>
+                        {isHV&&<div style={{fontSize:'.65rem',color:'var(--red)',fontWeight:700}}>⚠ High Value</div>}
+                      </td>
                       <td className="text-sm">{po.vendor?.shopName||'—'}<br/><span style={{fontSize:'.7rem',color:'var(--text-4)'}}>{po.vendor?.vendorType}</span></td>
                       <td style={{textTransform:'capitalize',fontSize:'.8125rem'}}>{po.department}</td>
                       <td>
@@ -882,16 +897,6 @@ function PurchaseOrdersTab() {
                       <td><span className={'badge '+(po.billUploaded?'badge-green':'badge-muted')}>{po.billUploaded?'✓':'—'}</span></td>
                       <td><span className={'badge '+(po.grcUploaded?'badge-green':'badge-muted')}>{po.grcUploaded?'✓':'—'}</span></td>
                       <td className="text-sm">{po.createdBy?.name||'—'}</td>
-                      <td>{po.approvedBy?<div><div style={{fontSize:'.8125rem',fontWeight:600,color:'var(--emerald)'}}>{po.approvedBy?.name}</div><div style={{fontSize:'.7rem',color:'var(--text-4)'}}>{fmt.date(po.approvedAt)}</div></div>:'—'}</td>
-                      <td>
-                        <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
-                          <button className="btn btn-icon btn-ghost btn-sm" onClick={()=>openDetail(po._id)}><Eye size={13}/></button>
-                          {po.orderStatus==='draft'&&<button className="btn btn-ghost btn-xs" style={{color:'var(--indigo)'}} onClick={()=>doAction(po._id,'approve')}>Approve</button>}
-                          {po.orderStatus==='approved'&&<button className="btn btn-ghost btn-xs" style={{color:'var(--amber)'}} onClick={()=>doAction(po._id,'dispatch')}>Dispatch</button>}
-                          {po.orderStatus==='dispatched'&&<button className="btn btn-ghost btn-xs" style={{color:'var(--emerald)'}} onClick={()=>doAction(po._id,'deliver')}>Deliver</button>}
-                          <button className="btn btn-ghost btn-xs" style={{color:'var(--sky)'}} onClick={()=>{setPayModal(po);setPayForm({paymentStatus:po.paymentStatus,advanceAmount:po.advanceAmount||''});}}>Payment</button>
-                        </div>
-                      </td>
                     </tr>
                   );
                 })}
@@ -901,15 +906,30 @@ function PurchaseOrdersTab() {
         </div>
       }
 
-      {detail&&(
-        <Modal open size="modal-xl" onClose={()=>setDetail(null)} title={'PO: '+detail.poNumber} footer={<button className="btn btn-ghost btn-sm" onClick={()=>setDetail(null)}>Close</button>}>
+      {detail&&(()=>{
+        const isHV = detail.requiresHighValueApproval;
+        const hva  = detail.hvApprovals || {};
+        const role = user?.role || '';
+        const canApproveGM  = ['gm','chairman','secretary'].includes(role) && isHV && !hva.gm?.approved;
+        const canApproveAGM = role === 'agm' && isHV && !hva.agm?.approved;
+        const canApproveDir = !['gm','agm','chairman','secretary'].includes(role) && isHV && !hva.director?.approved;
+        const hvApprove = async () => { await doAction(detail._id,'hv_approve'); };
+        const allHVDone = isHV && hva.director?.approved && hva.agm?.approved && hva.gm?.approved;
+        return (
+        <Modal open size="modal-xl" onClose={()=>setDetail(null)} title={'PO: '+detail.poNumber}
+          footer={<div style={{display:'flex',gap:8,alignItems:'center',justifyContent:'flex-end'}}>
+            {detail.orderStatus==='draft'&&['gm','agm','chairman','secretary'].includes(role)&&!isHV&&<button className="btn btn-success btn-sm" onClick={()=>doAction(detail._id,'approve')}>Approve PO</button>}
+            {detail.orderStatus==='approved'&&<button className="btn btn-ghost btn-xs" style={{color:'var(--amber)'}} onClick={()=>doAction(detail._id,'dispatch')}>Dispatch</button>}
+            {detail.orderStatus==='dispatched'&&<button className="btn btn-ghost btn-xs" style={{color:'var(--emerald)'}} onClick={()=>doAction(detail._id,'deliver')}>Deliver</button>}
+            <button className="btn btn-ghost btn-sm" onClick={()=>setDetail(null)}>Close</button>
+          </div>}>
           <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10,marginBottom:12}}>
             {[['Vendor',detail.vendor?.shopName||'—','var(--text-1)'],['Department',cap(detail.department),'var(--indigo)'],
               ['Total',fmt.inr(detail.totalAmount),'var(--indigo)'],['Advance',fmt.inr(detail.advanceAmount),'var(--emerald)'],
               ['Balance',fmt.inr(detail.balanceAmount),detail.balanceAmount>0?'var(--red)':'var(--emerald)'],
               ['Order Status',orderBadge(detail.orderStatus)?.label,'var(--sky)'],
               ['Payment',payBadge(detail.paymentStatus)?.label,'var(--amber)'],
-              ['Created By',(detail.createdBy?.name||'—')+' ('+detail.createdBy?.role+')','var(--text-2)'],
+              ['Created By',(detail.createdBy?.name||'—')+' ('+cap((detail.createdBy?.role||'').replace(/_/g,' '))+')','var(--text-2)'],
             ].map(([k,v,c])=>(
               <div key={k} style={{padding:'10px 12px',background:'var(--bg-subtle)',borderRadius:'var(--radius)'}}>
                 <div style={{fontSize:'.72rem',color:'var(--text-4)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.04em',marginBottom:3}}>{k}</div>
@@ -917,6 +937,31 @@ function PurchaseOrdersTab() {
               </div>
             ))}
           </div>
+
+          {/* High Value Approval Chain */}
+          {isHV&&(
+            <div style={{padding:'12px 16px',background:allHVDone?'var(--emerald-lt)':'var(--red-lt)',borderRadius:'var(--radius)',marginBottom:12,border:`1.5px solid ${allHVDone?'var(--emerald)':'var(--red)'}`}}>
+              <div style={{fontWeight:700,fontSize:'.875rem',color:allHVDone?'var(--emerald)':'var(--red)',marginBottom:8}}>
+                {allHVDone?'✅ All Approvals Received':'⚠ High Value PO (>₹50,000) — Multi-Level Approval Required'}
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
+                {[
+                  ['Department Director', hva.director, canApproveDir],
+                  ['AGM',                 hva.agm,      canApproveAGM],
+                  ['GM / Chairman',       hva.gm,       canApproveGM],
+                ].map(([label, appr, canApprove])=>(
+                  <div key={label} style={{padding:'8px 12px',background:'var(--white)',borderRadius:'var(--radius)',border:'1px solid var(--border)'}}>
+                    <div style={{fontSize:'.72rem',fontWeight:700,color:'var(--text-4)',textTransform:'uppercase',marginBottom:4}}>{label}</div>
+                    {appr?.approved
+                      ? <div style={{color:'var(--emerald)',fontWeight:700,fontSize:'.8125rem'}}>✓ {appr.approvedBy?.name||'Approved'}</div>
+                      : <div style={{color:'var(--text-4)',fontSize:'.8rem'}}>Pending</div>}
+                    {canApprove&&<button className="btn btn-sm btn-primary" style={{marginTop:6,width:'100%',justifyContent:'center'}} onClick={hvApprove}>Approve (My Level)</button>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="card" style={{padding:0,overflow:'hidden',marginBottom:12}}>
             <div style={{padding:'10px 14px',borderBottom:'1.5px solid var(--border)',fontWeight:600,fontSize:'.875rem'}}>Items in Order</div>
             <table>
@@ -939,7 +984,8 @@ function PurchaseOrdersTab() {
           </div>
           <ChangeLog log={detail.changeLog||[]}/>
         </Modal>
-      )}
+        );
+      })()}
 
       {payModal&&(
         <Modal open onClose={()=>setPayModal(null)} title={'Update Payment — '+payModal.poNumber}
@@ -964,10 +1010,10 @@ function PurchaseOrdersTab() {
         </Modal>
       )}
 
-      <Modal open={modal} onClose={()=>setModal(false)} title="Create Purchase Order" size="modal-xl"
-        footer={<><button className="btn btn-ghost btn-sm" onClick={()=>setModal(false)}>Cancel</button><button className="btn btn-primary btn-sm" onClick={savePO}>Create PO</button></>}>
+      <Modal open={modal} onClose={()=>{ if(!submitting){ setModal(false); setItemSearch([]); }}} title="Create Purchase Order" size="modal-xl"
+        footer={<><button className="btn btn-ghost btn-sm" onClick={()=>{ if(!submitting){ setModal(false); setItemSearch([]); }}}>Cancel</button><button className="btn btn-primary btn-sm" onClick={savePO} disabled={submitting}>{submitting?'Creating…':'Create PO'}</button></>}>
         <div className="form-row cols-3">
-          <FG label="Department" required><select value={form.department} onChange={e=>setForm({...form,department:e.target.value})}>{DEPTS.map(d=><option key={d} value={d}>{cap(d)}</option>)}</select></FG>
+          <FG label="Department" required><select value={form.department} onChange={e=>setForm({...form,department:e.target.value})}>{DEPTS_NO_STORE.map(d=><option key={d} value={d}>{cap(d)}</option>)}</select></FG>
           <FG label="Vendor" required><select value={form.vendor} onChange={e=>setForm({...form,vendor:e.target.value})}><option value="">Select vendor…</option>{vendors.map(v=><option key={v._id} value={v._id}>{v.shopName} ({cap(v.vendorType)})</option>)}</select></FG>
           <FG label="Expected Delivery Date"><input type="date" value={form.expectedDelivery} onChange={e=>setForm({...form,expectedDelivery:e.target.value})} min={new Date().toISOString().slice(0,10)}/></FG>
         </div>
@@ -980,7 +1026,7 @@ function PurchaseOrdersTab() {
             </div>
           </div>
           <div style={{display:'grid',gridTemplateColumns:'2.5fr 1.2fr 0.8fr 0.7fr 1fr 1fr 28px',gap:6,marginBottom:4}}>
-            {['Item (from Store)','Category','Qty','Unit','Unit Price ₹','Total',''].map(h=><div key={h} style={{fontSize:'.72rem',fontWeight:700,color:'var(--text-4)',textTransform:'uppercase',letterSpacing:'.04em'}}>{h}</div>)}
+            {['Item','Category','Qty','Unit','Unit Price ₹','Total',''].map(h=><div key={h} style={{fontSize:'.72rem',fontWeight:700,color:'var(--text-4)',textTransform:'uppercase',letterSpacing:'.04em'}}>{h}</div>)}
           </div>
           {form.items.map((it,i)=>{
             const search = itemSearch[i]||'';
@@ -1039,6 +1085,8 @@ function OrderTrackingTab() {
   const [delivModal, setDM]   = useState(null);
   const [delivDate,  setDD]   = useState('');
 
+  const [subTab, setSubTab]   = useState('upcoming');
+
   const load = useCallback(()=>{
     setLoad(true);
     procAPI.orderTracking({department:deptF||undefined,orderStatus:statusF||undefined})
@@ -1052,7 +1100,12 @@ function OrderTrackingTab() {
     catch(e){ toast.error('Failed'); }
   };
 
-  const filtered = orders.filter(o=>!search||o.poNumber?.toLowerCase().includes(search.toLowerCase())||o.vendor?.shopName?.toLowerCase().includes(search.toLowerCase())||o.department?.toLowerCase().includes(search.toLowerCase()));
+  const filtered = orders.filter(o=>{
+    if (subTab === 'delivered' && o.orderStatus !== 'delivered') return false;
+    if (subTab === 'upcoming' && o.orderStatus === 'delivered') return false;
+    if (search && !o.poNumber?.toLowerCase().includes(search.toLowerCase()) && !o.vendor?.shopName?.toLowerCase().includes(search.toLowerCase()) && !o.department?.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
 
   return (
     <div style={{display:'flex',flexDirection:'column',gap:12}}>
@@ -1065,12 +1118,16 @@ function OrderTrackingTab() {
       </div>
 
       <div className="flex items-center justify-between">
+        <div style={{display:'flex', gap: 6, background:'var(--bg-2)', padding: 4, borderRadius: 'var(--radius)'}}>
+          <button className="btn btn-sm" style={{background:subTab==='upcoming'?'var(--white)':'transparent', boxShadow:subTab==='upcoming'?'0 1px 3px rgba(0,0,0,.1)':'none', color:subTab==='upcoming'?'var(--indigo)':'var(--text-3)'}} onClick={()=>setSubTab('upcoming')}>Upcoming</button>
+          <button className="btn btn-sm" style={{background:subTab==='delivered'?'var(--white)':'transparent', boxShadow:subTab==='delivered'?'0 1px 3px rgba(0,0,0,.1)':'none', color:subTab==='delivered'?'var(--emerald)':'var(--text-3)'}} onClick={()=>setSubTab('delivered')}>Delivered</button>
+        </div>
         <div className="filter-bar">
           <div className="search-wrap"><span className="search-icon"><Search size={13}/></span><input style={{width:180}} placeholder="Search PO, vendor…" value={search} onChange={e=>setSearch(e.target.value)}/></div>
           <select value={deptF} onChange={e=>setDeptF(e.target.value)} style={{width:140}}><option value="">All Departments</option>{DEPTS.map(d=><option key={d} value={d}>{cap(d)}</option>)}</select>
           <select value={statusF} onChange={e=>setStatusF(e.target.value)} style={{width:140}}><option value="">All Status</option>{['draft','approved','dispatched','delivered'].map(s=><option key={s} value={s}>{s === 'approved' ? 'Order Placed' : s === 'dispatched' ? 'In Transit' : cap(s)}</option>)}</select>
+          <button className="btn btn-ghost btn-sm" onClick={load}><RefreshCw size={13}/>Refresh</button>
         </div>
-        <button className="btn btn-ghost btn-sm" onClick={load}><RefreshCw size={13}/>Refresh</button>
       </div>
 
       {loading?<div style={{padding:32,textAlign:'center',color:'var(--text-4)'}}>Loading…</div>:
@@ -1349,7 +1406,7 @@ export default function ProcurementPage({ defaultTab }) {
       <div className="page-body">
         {tab==='requirements'&&<RequirementsTab user={user}/>}
         {tab==='vendors'     &&<VendorsTab/>}
-        {tab==='orders'      &&<PurchaseOrdersTab/>}
+        {tab==='orders'      &&<PurchaseOrdersTab user={user}/>}
         {tab==='tracking'    &&<OrderTrackingTab/>}
         {tab==='quality'     &&<QualityTab/>}
       </div>

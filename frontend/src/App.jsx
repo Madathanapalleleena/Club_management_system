@@ -9,6 +9,8 @@ import { LoadingPage } from './components/ui';
 
 import ChairmanDashboard from './components/modules/dashboard/ChairmanDashboard';
 import GMDashboard from './components/modules/dashboard/GMDashboard';
+import AGMDashboard from './components/modules/dashboard/AGMDashboard';
+import DirectorDashboard from './components/modules/dashboard/DirectorDashboard';
 import { DepartmentDashboard } from './components/modules/dashboard/DeptDashboard';
 import { ProcurementDashboard, StoreDashboard, KitchenDashboard, AccountsDashboard, HRDashboard } from './components/modules/dashboard/OperationalDashboards';
 
@@ -34,7 +36,8 @@ function PublicGuard({ children }) {
   if (loading) return <LoadingPage/>;
   if (user) {
     const d = roleDash(user.role);
-    return <Navigate to={d === 'chairman' ? '/' : '/' + d} replace/>;
+    const rootRoles = ['chairman', 'gm', 'director'];
+    return <Navigate to={rootRoles.includes(d) ? '/' : '/' + d} replace/>;
   }
   return children;
 }
@@ -44,7 +47,7 @@ function RoleDash() {
   if (!user) return <LoadingPage/>;
   const map = {
     chairman: <ChairmanDashboard/>, secretary: <ChairmanDashboard/>,
-    gm: <GMDashboard/>, agm: <GMDashboard/>,
+    gm: <GMDashboard/>, agm: <AGMDashboard/>, director: <DirectorDashboard/>,
     procurement_manager: <ProcurementDashboard/>, procurement_assistant: <ProcurementDashboard/>,
     store_manager: <StoreDashboard/>, store_assistant: <StoreDashboard/>,
     kitchen_manager: <KitchenDashboard/>, food_control: <KitchenDashboard/>,
@@ -59,7 +62,7 @@ function RoleDash() {
 }
 
 const SUPER  = ['chairman','secretary','gm','agm'];
-const PROC   = [...SUPER,'procurement_manager','procurement_assistant'];
+const PROC   = [...SUPER,'director','procurement_manager','procurement_assistant'];
 const STORE  = [...SUPER,'store_manager','store_assistant'];
 const KITCH  = [...SUPER,'kitchen_manager','food_control'];
 const ACCT   = [...SUPER,'accounts_manager'];

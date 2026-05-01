@@ -323,7 +323,7 @@ function BookingsTab() {
           <div style={{fontWeight:700,marginBottom:10,fontSize:'.875rem'}}>Guest Details</div>
           <div className="form-row cols-2">
             <FG label="Guest Name" required><input value={form.customerName} onChange={e=>setForm({...form,customerName:e.target.value})}/></FG>
-            <FG label="Mobile (10 digits)" required><input type="tel" maxLength={10} value={form.customerMobile} onChange={e=>setForm({...form,customerMobile:e.target.value})}/></FG>
+            <FG label="Mobile (10 digits)" required><input type="tel" maxLength={10} pattern="\d{10}" onKeyPress={e=>!/[0-9]/.test(e.key)&&e.preventDefault()} value={form.customerMobile} onChange={e=>setForm({...form,customerMobile:e.target.value})}/></FG>
           </div>
           <div className="form-row cols-2">
             <FG label="Email"><input type="email" value={form.customerEmail} onChange={e=>setForm({...form,customerEmail:e.target.value})}/></FG>
@@ -335,7 +335,6 @@ function BookingsTab() {
           </div>
           <FG label="Address"><input value={form.customerAddress} onChange={e=>setForm({...form,customerAddress:e.target.value})}/></FG>
         </div>
-        <FG label="Notes"><textarea value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} style={{minHeight:55}}/></FG>
       </Modal>
     </div>
   );
@@ -344,11 +343,16 @@ function BookingsTab() {
 // ── Dashboard Tab ─────────────────────────────────────────────────
 function DashboardTab() {
   const [stats, setStats] = useState(null);
-  useEffect(() => { roomsAPI.stats().then(r=>setStats(r.data)).catch(()=>{}); }, []);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  useEffect(() => { roomsAPI.stats(selectedDate).then(r=>setStats(r.data)).catch(()=>{}); }, [selectedDate]);
   if (!stats) return <div style={{padding:32,textAlign:'center',color:'var(--text-4)'}}>Loading...</div>;
 
   return (
     <div style={{display:'flex',flexDirection:'column',gap:14}}>
+      <div className="flex items-center justify-between">
+        <div><h2 style={{fontSize:'1.2rem'}}>Rooms Overview</h2><p style={{color:'var(--text-3)',fontSize:'.875rem'}}>Metrics up to · {fmt.date(new Date(selectedDate))}</p></div>
+        <div><input type="date" className="input-sm" style={{borderRadius:8, border:'1px solid var(--border)', padding:'4px 8px'}} value={selectedDate} onChange={e => setSelectedDate(e.target.value)} /></div>
+      </div>
       <div className="stats-grid">
         <Stat label="Total Rooms"      value={stats.totalRooms}     color="var(--text-1)"/>
         <Stat label="Occupied"         value={stats.occupiedRooms}  color="var(--red)"     sub="Right now"/>

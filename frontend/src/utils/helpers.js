@@ -14,6 +14,7 @@ export const ROLES = {
   secretary:           { label:'Secretary',          color:'#7c3aed', bg:'#f5f3ff', dash:'chairman' },
   gm:                  { label:'General Manager',    color:'#0369a1', bg:'#e0f2fe', dash:'gm' },
   agm:                 { label:'AGM',                color:'#0369a1', bg:'#e0f2fe', dash:'gm' },
+  director:            { label:'Director',           color:'#4f46e5', bg:'#e0e7ff', dash:'director' },
   procurement_manager: { label:'Procurement Manager',color:'#065f46', bg:'#ecfdf5', dash:'procurement' },
   procurement_assistant:{ label:'Procurement Asst.',  color:'#065f46', bg:'#ecfdf5', dash:'procurement' },
   store_manager:       { label:'Store Manager',      color:'#92400e', bg:'#fef3c7', dash:'store' },

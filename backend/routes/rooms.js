@@ -204,12 +204,12 @@ router.put('/bookings/:id', protect, async (req, res) => {
 router.get('/stats', protect, async (req, res) => {
   try {
     await cleanStaleReservations();
-    const now    = new Date();
-    const today  = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0,  0,  0);
-    const todayE = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
-    const mStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const mEnd   = new Date(now.getFullYear(), now.getMonth()+1, 0, 23,59,59);
-    const wStart = new Date(now.getTime() - 6*86400000);
+    const d = req.query.date ? new Date(req.query.date) : new Date();
+    const today  = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0,  0,  0);
+    const todayE = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+    const mStart = new Date(d.getFullYear(), d.getMonth(), 1);
+    const mEnd   = new Date(d.getFullYear(), d.getMonth()+1, 0, 23, 59, 59, 999);
+    const wStart = new Date(d.getTime() - 6*86400000);
 
     const [
       totalRooms, occupiedRooms, availableRooms, maintenanceRooms,

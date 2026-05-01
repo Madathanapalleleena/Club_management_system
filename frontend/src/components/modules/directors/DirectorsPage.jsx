@@ -163,13 +163,12 @@ export default function Directors() {
               {DEPTS.map(d=><option key={d} value={d}>{deptLabel(d)}</option>)}
             </select>
           </FG>
-          <FG label="Mobile" required><input value={form.mobile} onChange={e=>setForm({...form,mobile:e.target.value})} placeholder="9876543210" /></FG>
+          <FG label="Mobile" required><input type="tel" maxLength={10} pattern="\d{10}" onKeyPress={e=>!/[0-9]/.test(e.key)&&e.preventDefault()} value={form.mobile} onChange={e=>setForm({...form,mobile:e.target.value})} placeholder="9876543210" /></FG>
         </div>
         <div className="form-row cols-2">
-          <FG label="Email"><input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="director@club.com" /></FG>
+          <FG label="Email (Optional)"><input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="director@example.com" /></FG>
           <FG label="Date of Creation" required><input type="date" value={form.dateOfCreation} onChange={e=>setForm({...form,dateOfCreation:e.target.value})} /></FG>
         </div>
-        <FG label="Notes"><textarea value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} placeholder="Optional notes…" style={{minHeight:60}} /></FG>
       </Modal>
     </div>
   );

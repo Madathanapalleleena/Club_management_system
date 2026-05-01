@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const bcrypt   = require('bcryptjs');
 
 const ROLES = [
-  'chairman','secretary','gm','agm',
+  'chairman','secretary','gm','agm','director',
   'procurement_manager','procurement_assistant',
   'store_manager','store_assistant',
   'kitchen_manager','food_control',

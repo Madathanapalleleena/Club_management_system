@@ -50,6 +50,44 @@ router.post('/items', protect, async (req, res) => {
   } catch (e) { res.status(500).json({ message: e.message }); }
 });
 
+// Bulk upsert: if item with same name exists → add quantity; otherwise create new
+router.post('/items/bulk-upsert', protect, async (req, res) => {
+  try {
+    const rows = Array.isArray(req.body) ? req.body : [];
+    const results = [];
+    for (const row of rows) {
+      if (!row.name) continue;
+      const escapedName = row.name.trim().replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+      const existing = await Item.findOne({ name: { $regex: new RegExp(`^${escapedName}$`, 'i') }, isActive: true });
+      if (existing) {
+        const prev = existing.quantity;
+        const addQty = parseFloat(row.quantity) || 0;
+        existing.quantity += addQty;
+        
+        // Update other fields if provided
+        if (row.itemType) existing.itemType = row.itemType;
+        if (row.category) existing.category = row.category;
+        if (row.unit) existing.unit = row.unit;
+        if (row.unitPrice) existing.unitPrice = parseFloat(row.unitPrice);
+        if (row.thresholdValue) existing.thresholdValue = parseFloat(row.thresholdValue);
+        if (row.expiryDate) existing.expiryDate = new Date(row.expiryDate);
+        if (row.department) existing.department = row.department;
+        if (row.location) existing.location = row.location;
+        
+        existing.lastUpdatedBy = req.user._id;
+        await existing.save();
+        if (addQty > 0) await StockTxn.create({ item: existing._id, type: 'adjustment', quantity: addQty, previousQty: prev, newQty: existing.quantity, notes: 'Bulk upload — quantity updated', performedBy: req.user._id });
+        results.push({ action: 'updated', name: existing.name });
+      } else {
+        const item = await Item.create({ ...row, name: row.name.trim(), createdBy: req.user._id });
+        if (item.quantity > 0) await StockTxn.create({ item: item._id, type: 'initial', quantity: item.quantity, previousQty: 0, newQty: item.quantity, performedBy: req.user._id });
+        results.push({ action: 'created', name: item.name });
+      }
+    }
+    res.json(results);
+  } catch (e) { res.status(500).json({ message: e.message }); }
+});
+
 router.put('/items/:id', protect, async (req, res) => {
   try {
     const item = await Item.findByIdAndUpdate(req.params.id, { ...req.body, lastUpdatedBy: req.user._id }, { new: true });
@@ -112,7 +150,41 @@ router.post('/grc', protect, upload.fields([{ name:'grcFile' },{ name:'billFile'
   try {
     const data = typeof req.body.data === 'string' ? JSON.parse(req.body.data) : req.body;
     const grc = await GRC.create({ ...data, receivedBy: req.user._id, grcFilePath: req.files?.grcFile?.[0]?.path, billPath: req.files?.billFile?.[0]?.path, billFileName: req.files?.billFile?.[0]?.originalname });
-    if (grc.linkedPO) { const po = await PO.findById(grc.linkedPO); if (po) { po.grcUploaded = true; po.grcUploadedBy = req.user._id; if (grc.billPath) { po.billUploaded = true; po.billUploadedBy = req.user._id; po.billUploadedAt = new Date(); po.billPath = grc.billPath; } po.changeLog.push({ action:'grc_uploaded', note:`GRC by ${req.user.name}`, performedBy:req.user._id }); await po.save(); } }
+    
+    if (grc.linkedPO) { 
+      const po = await PO.findById(grc.linkedPO); 
+      if (po) { 
+        po.grcUploaded = true; po.grcUploadedBy = req.user._id; 
+        if (grc.billPath) { po.billUploaded = true; po.billUploadedBy = req.user._id; po.billUploadedAt = new Date(); po.billPath = grc.billPath; } 
+        po.changeLog.push({ action:'grc_uploaded', note:`GRC by ${req.user.name}`, performedBy:req.user._id }); 
+        await po.save(); 
+      } 
+    }
+
+    // Update inventory based on receivedQty
+    for (const item of grc.items) {
+      if (item.itemId && item.receivedQty > 0) {
+        const storeItem = await Item.findById(item.itemId);
+        if (storeItem) {
+          const prevQty = storeItem.quantity;
+          storeItem.quantity += Number(item.receivedQty);
+          storeItem.lastUpdatedBy = req.user._id;
+          storeItem.lastPurchased = new Date();
+          await storeItem.save();
+          await StockTxn.create({
+            item: storeItem._id,
+            type: 'purchase',
+            quantity: Number(item.receivedQty),
+            previousQty: prevQty,
+            newQty: storeItem.quantity,
+            notes: `Received via GRC (PO: ${grc.poNumber})`,
+            performedBy: req.user._id,
+            linkedPO: grc.linkedPO
+          });
+        }
+      }
+    }
+
     await Notif.notifyRoles(['store_manager','accounts_manager','procurement_manager','gm'], '📦 GRC Uploaded', `PO ${grc.poNumber} — 4-party verify required`, 'info', grc._id, 'store');
     res.status(201).json(grc);
   } catch (e) { res.status(500).json({ message: e.message }); }
@@ -136,8 +208,12 @@ router.get('/internal-requests', protect, async (req, res) => {
     const f = {};
     if (req.query.status) f.status = req.query.status;
     if (req.query.department) f.department = req.query.department;
-    const deptOnly = ['kitchen_manager','food_control','bar_manager','banquet_manager','rooms_manager','sports_manager','maintenance_manager'];
-    if (deptOnly.includes(req.user.role)) f.requestedBy = req.user._id;
+    // Department managers see all requests for their own department
+    const deptManagers = ['kitchen_manager','food_control','bar_manager','banquet_manager','rooms_manager','sports_manager','maintenance_manager','hr_manager','accounts_manager'];
+    if (deptManagers.includes(req.user.role)) {
+      const deptMap = { kitchen_manager:'kitchen', food_control:'kitchen', bar_manager:'bar', banquet_manager:'banquet', rooms_manager:'rooms', sports_manager:'sports', maintenance_manager:'maintenance', hr_manager:'hr', accounts_manager:'accounts' };
+      f.department = req.user.department || deptMap[req.user.role] || req.user.role.replace('_manager','').replace('_control','');
+    }
     const reqs = await InternalRequest.find(f)
       .populate('requestedBy','name role department')
       .populate('approvedBy','name role')

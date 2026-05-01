@@ -36,10 +36,17 @@ function ItemsTab() {
         const text = evt.target.result;
         const rows = text.split(/\r?\n/).filter(r => r.trim() !== '');
         if (rows.length <= 1) { toast.error('CSV file is empty or only contains headers.'); return; }
-        let successCount = 0, failCount = 0;
-        toast.loading('Importing items...');
+        const items = [];
         for (let i = 1; i < rows.length; i++) {
-          const parts = rows[i].split(',');
+          let p = '', inQuote = false;
+          const parts = [];
+          for (let c of rows[i]) {
+            if (c === '"') inQuote = !inQuote;
+            else if (c === ',' && !inQuote) { parts.push(p); p = ''; }
+            else p += c;
+          }
+          parts.push(p);
+          
           if (parts.length < 5) continue;
           const rowData = {
             name: parts[0]?.trim(),
@@ -52,13 +59,18 @@ function ItemsTab() {
           };
           const exDate = parts[7]?.trim();
           if (exDate) rowData.expiryDate = exDate;
-          if (!rowData.name) continue;
-          try { await storeAPI.createItem(rowData); successCount++; }
-          catch (err) { console.error('Bulk Import Error:', err.response?.data || err.message); failCount++; }
+          if (rowData.name) items.push(rowData);
         }
-        toast.dismiss();
-        if (successCount > 0) toast.success(`${successCount} items successfully imported into inventory.`);
-        if (failCount > 0) toast.error(`${failCount} items failed to import.`);
+        if (!items.length) { toast.error('No valid rows found in CSV.'); return; }
+        toast.loading('Importing items...');
+        try {
+          const results = await storeAPI.bulkUpsertItems(items);
+          toast.dismiss();
+          const created = results.data.filter(r => r.action === 'created').length;
+          const updated = results.data.filter(r => r.action === 'updated').length;
+          if (created > 0) toast.success(`${created} new item(s) added to inventory.`);
+          if (updated > 0) toast.success(`${updated} existing item(s) quantity updated (no duplicates created).`);
+        } catch (err) { toast.dismiss(); toast.error(err.response?.data?.message || 'Bulk import failed.'); }
         load();
       } catch (err) { toast.dismiss(); toast.error('Failed to parse CSV file.'); }
       if (bulkInvRef.current) bulkInvRef.current.value = '';
@@ -287,21 +299,57 @@ function ItemsTab() {
 // ── GRC TAB ──────────────────────────────────────────────────────
 function GRCTab() {
   const [grcs, setGrcs] = useState([]);
+  const [deliveredPOs, setDeliveredPOs] = useState([]);
   const [loading, setLoad] = useState(true);
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState({ poNumber: '', items: [{ itemName: '', orderedQty: '', receivedQty: '', missingQty: 0, mismatchNotes: '' }], notes: '', status: 'pending' });
 
-  const load = () => { setLoad(true); storeAPI.grc().then(r => setGrcs(r.data)).finally(() => setLoad(false)); };
+  const load = () => { 
+    setLoad(true); 
+    Promise.all([
+      storeAPI.grc(),
+      procAPI.orderTracking({ orderStatus: 'delivered' })
+    ]).then(([r1, r2]) => {
+      setGrcs(r1.data);
+      setDeliveredPOs(r2.data);
+    }).finally(() => setLoad(false)); 
+  };
   useEffect(() => { load(); }, []);
 
   const addRow = () => setForm(f => ({ ...f, items: [...f.items, { itemName: '', orderedQty: '', receivedQty: '', missingQty: 0, mismatchNotes: '' }] }));
   const setRow = (i, k, v) => setForm(f => ({ ...f, items: f.items.map((it, x) => x === i ? { ...it, [k]: v, missingQty: k === 'receivedQty' ? Math.max(0, (it.orderedQty || 0) - Number(v)) : it.missingQty } : it) }));
 
+  const handlePOChange = (e) => {
+    const selPO = e.target.value;
+    const poObj = deliveredPOs.find(p => p.poNumber === selPO);
+    if (poObj) {
+      setForm(f => ({
+        ...f,
+        poNumber: selPO,
+        linkedPO: poObj._id,
+        items: poObj.items.map(it => ({
+          itemId: it.itemId,
+          itemName: it.itemName,
+          orderedQty: it.quantity,
+          receivedQty: '',
+          missingQty: it.quantity,
+          mismatchNotes: ''
+        }))
+      }));
+    } else {
+      setForm(f => ({
+        ...f, poNumber: selPO, linkedPO: '', items: [{ itemId: null, itemName: '', orderedQty: '', receivedQty: '', missingQty: 0, mismatchNotes: '' }]
+      }));
+    }
+  };
+
   const save = async () => {
+    if (!form.poNumber) return toast.error('Select a PO');
     if (!form.items[0].itemName) return toast.error('Add at least one item');
     try {
       const fd = new FormData(); fd.append('data', JSON.stringify(form));
       await storeAPI.createGRC(fd); toast.success('GRC uploaded'); load(); setModal(false);
+      setForm({ poNumber: '', items: [{ itemName: '', orderedQty: '', receivedQty: '', missingQty: 0, mismatchNotes: '' }], notes: '', status: 'pending' });
     } catch (e) { toast.error('Failed'); }
   };
 
@@ -343,7 +391,12 @@ function GRCTab() {
       <Modal open={modal} onClose={() => setModal(false)} title="Upload Goods Received Copy" size="modal-lg"
         footer={<><button className="btn btn-ghost btn-sm" onClick={() => setModal(false)}>Cancel</button><button className="btn btn-primary btn-sm" onClick={save}>Upload GRC</button></>}
       >
-        <FG label="PO Number"><input value={form.poNumber} onChange={e => setForm({ ...form, poNumber: e.target.value })} placeholder="PO-KIT001/04/25" /></FG>
+        <FG label="PO Number" required>
+          <select value={form.poNumber} onChange={handlePOChange}>
+            <option value="">Select Delivered PO...</option>
+            {deliveredPOs.map(po => <option key={po._id} value={po.poNumber}>{po.poNumber} - {po.vendor?.shopName || 'Unknown Vendor'}</option>)}
+          </select>
+        </FG>
         <div>
           <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
             <label style={{ fontSize: '.8125rem', fontWeight: 600, color: 'var(--text-2)' }}>Items Received</label>
@@ -351,8 +404,8 @@ function GRCTab() {
           </div>
           {form.items.map((it, i) => (
             <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 0.8fr 0.8fr 0.6fr 2fr', gap: 6, marginBottom: 6 }}>
-              <input placeholder="Item name" value={it.itemName} onChange={e => setRow(i, 'itemName', e.target.value)} />
-              <input placeholder="Ordered" type="number" value={it.orderedQty} onChange={e => setRow(i, 'orderedQty', e.target.value)} />
+              <input placeholder="Item name" value={it.itemName} readOnly style={{ background: 'var(--bg-subtle)' }} />
+              <input placeholder="Ordered" type="number" value={it.orderedQty} readOnly style={{ background: 'var(--bg-subtle)' }} />
               <input placeholder="Received" type="number" value={it.receivedQty} onChange={e => setRow(i, 'receivedQty', e.target.value)} />
               <input placeholder="Missing" type="number" value={it.missingQty} readOnly style={{ background: 'var(--bg-subtle)', color: it.missingQty > 0 ? 'var(--red)' : 'var(--text-3)' }} />
               <input placeholder="Mismatch notes" value={it.mismatchNotes} onChange={e => setRow(i, 'mismatchNotes', e.target.value)} />
@@ -365,22 +418,30 @@ function GRCTab() {
   );
 }
 
+const DEPT_MGR_ROLES = ['kitchen_manager','food_control','bar_manager','banquet_manager','rooms_manager','sports_manager','maintenance_manager','hr_manager','accounts_manager'];
+const DEPT_ROLE_MAP  = { kitchen_manager:'kitchen', food_control:'kitchen', bar_manager:'bar', banquet_manager:'banquet', rooms_manager:'rooms', sports_manager:'sports', maintenance_manager:'maintenance', hr_manager:'hr', accounts_manager:'accounts' };
+
 // ── INTERNAL REQUESTS TAB ────────────────────────────────────────
-function InternalRequestsTab({ setTab }) {
+function InternalRequestsTab({ setTab, user }) {
+  const isDeptMgr = DEPT_MGR_ROLES.includes(user?.role);
+  const userDept  = user?.department || DEPT_ROLE_MAP[user?.role] || 'kitchen';
+
   const [reqs, setReqs] = useState([]);
   const [loading, setLoad] = useState(true);
   const [statusF, setStatusF] = useState('');
+  const [deptF, setDeptF] = useState('');
   const [modal, setModal] = useState(false);
   const [detailModal, setDetailModal] = useState(null);
-  const [form, setForm] = useState({ department: 'kitchen', priority: 'medium', items: [{ itemName: '', quantity: '', unit: 'kg', category: '' }], notes: '' });
+  const [form, setForm] = useState({ department: userDept, priority: 'medium', items: [{ itemName: '', quantity: '', unit: 'kg', category: '' }], notes: '' });
   const [returnModal, setReturnModal] = useState(null);
   const [returnForm, setReturnForm] = useState([]);
 
   const load = useCallback(() => {
     setLoad(true);
     const p = {}; if (statusF) p.status = statusF;
+    if (deptF) p.department = deptF;
     storeAPI.internalReqs(p).then(r => setReqs(r.data)).finally(() => setLoad(false));
-  }, [statusF]);
+  }, [statusF, deptF]);
   useEffect(() => { load(); }, [load]);
 
   const addRow = () => setForm(f => ({ ...f, items: [...f.items, { itemName: '', quantity: '', unit: 'kg', category: '' }] }));
@@ -388,7 +449,7 @@ function InternalRequestsTab({ setTab }) {
 
   const save = async () => {
     if (!form.items[0].itemName) return toast.error('Add at least one item');
-    try { await storeAPI.createInternalReq(form); toast.success('Request raised'); load(); setModal(false); setForm({ department: 'kitchen', priority: 'medium', items: [{ itemName: '', quantity: '', unit: 'kg', category: '' }], notes: '' }); }
+    try { await storeAPI.createInternalReq(form); toast.success('Request raised'); load(); setModal(false); setForm({ department: userDept, priority: 'medium', items: [{ itemName: '', quantity: '', unit: 'kg', category: '' }], notes: '' }); }
     catch (e) { toast.error(e.response?.data?.message || 'Failed'); }
   };
 
@@ -418,6 +479,10 @@ function InternalRequestsTab({ setTab }) {
           <select value={statusF} onChange={e => setStatusF(e.target.value)} style={{ width: 160 }}>
             <option value="">All Status</option>
             {['pending', 'approved', 'rejected', 'partially_approved', 'issued', 'completed'].map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
+          </select>
+          <select value={deptF} onChange={e => setDeptF(e.target.value)} style={{ width: 160 }}>
+            <option value="">All Departments</option>
+            {DEPT_LIST.map(d => <option key={d} value={d}>{d.charAt(0).toUpperCase() + d.slice(1)}</option>)}
           </select>
         </div>
         <button className="btn btn-primary btn-sm" onClick={() => setModal(true)}><Plus size={13} />Raise Request</button>
@@ -557,7 +622,12 @@ function InternalRequestsTab({ setTab }) {
         footer={<><button className="btn btn-ghost btn-sm" onClick={() => setModal(false)}>Cancel</button><button className="btn btn-primary btn-sm" onClick={save}>Submit</button></>}
       >
         <div className="form-row cols-2">
-          <FG label="Department" required><select value={form.department} onChange={e => setForm({ ...form, department: e.target.value })}>{DEPT_LIST.map(d => <option key={d} value={d}>{d}</option>)}</select></FG>
+          <FG label="Department" required>
+            {isDeptMgr
+              ? <input value={form.department} readOnly style={{ background: 'var(--bg-subtle)', textTransform: 'capitalize' }} />
+              : <select value={form.department} onChange={e => setForm({ ...form, department: e.target.value })}>{DEPT_LIST.map(d => <option key={d} value={d}>{d}</option>)}</select>
+            }
+          </FG>
           <FG label="Priority"><select value={form.priority} onChange={e => setForm({ ...form, priority: e.target.value })}>{['low', 'medium', 'high', 'urgent'].map(p => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}</select></FG>
         </div>
         <div>
@@ -586,6 +656,7 @@ function OrderTrackingTab() {
   const [loading, setLoad] = useState(true);
   const [editPO, setEditPO] = useState(null);
   const [editItems, setEditItems] = useState([]);
+  const [subTab, setSubTab] = useState('upcoming');
 
   const load = () => { setLoad(true); storeAPI.orderTracking().then(r => setOrders(r.data)).finally(() => setLoad(false)); };
   useEffect(() => { load(); }, []);
@@ -598,16 +669,28 @@ function OrderTrackingTab() {
     catch (e) { toast.error('Failed'); }
   };
 
+  const filtered = orders.filter(o => {
+    if (subTab === 'delivered' && o.orderStatus !== 'delivered') return false;
+    if (subTab === 'upcoming' && o.orderStatus === 'delivered') return false;
+    return true;
+  });
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <span className="text-3 text-sm">{orders.length} purchase order(s)</span>
+      <div className="flex items-center justify-between">
+        <div style={{display:'flex', gap: 6, background:'var(--bg-2)', padding: 4, borderRadius: 'var(--radius)'}}>
+          <button className="btn btn-sm" style={{background:subTab==='upcoming'?'var(--white)':'transparent', boxShadow:subTab==='upcoming'?'0 1px 3px rgba(0,0,0,.1)':'none', color:subTab==='upcoming'?'var(--indigo)':'var(--text-3)'}} onClick={()=>setSubTab('upcoming')}>Upcoming</button>
+          <button className="btn btn-sm" style={{background:subTab==='delivered'?'var(--white)':'transparent', boxShadow:subTab==='delivered'?'0 1px 3px rgba(0,0,0,.1)':'none', color:subTab==='delivered'?'var(--emerald)':'var(--text-3)'}} onClick={()=>setSubTab('delivered')}>Delivered</button>
+        </div>
+        <span className="text-3 text-sm">{filtered.length} purchase order(s)</span>
+      </div>
       {loading ? <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-4)' }}>Loading...</div> :
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           <div className="table-wrap">
             <table>
               <thead><tr><th>PO Number</th><th>Vendor</th><th>Dept</th><th>Items</th><th>Amount</th><th>Payment</th><th>Order Status</th><th>Delivery</th><th>GRC</th><th></th></tr></thead>
               <tbody>
-                {orders.map(po => {
+                {filtered.map(po => {
                   const os = orderBadge(po.orderStatus), ps = payBadge(po.paymentStatus);
                   return (
                     <tr key={po._id}>
@@ -679,7 +762,7 @@ function ProcurementRequestsTab() {
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
-  const load = () => { setLoad(true); procAPI.requests({ department: 'store' }).then(r => setReqs(r.data)).finally(() => setLoad(false)); };
+  const load = () => { setLoad(true); procAPI.requests().then(r => setReqs(r.data)).finally(() => setLoad(false)); };
   useEffect(() => { load(); }, []);
 
   const addRow = () => setForm(f => ({ ...f, items: [...f.items, { itemName: '', quantity: '', unit: 'kg', category: '' }] }));
@@ -700,22 +783,24 @@ function ProcurementRequestsTab() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div className="flex items-center justify-between">
-        <span className="text-3 text-sm">{reqs.length} Procurement Request(s)</span>
-        <button className="btn btn-primary btn-sm" onClick={() => setModal(true)}><Plus size={13} />Raise Request to Procurement</button>
+        <span className="text-3 text-sm">{reqs.length} Procurement Request(s) across all departments</span>
+        <button className="btn btn-primary btn-sm" onClick={() => setModal(true)}><Plus size={13} />Raise Store Request</button>
       </div>
       {loading ? <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-4)' }}>Loading...</div> :
         reqs.length === 0 ? <Empty icon={FileText} title="No procurement requests" /> :
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
             <div className="table-wrap">
               <table>
-                <thead><tr><th>Req #</th><th>Items</th><th>Priority</th><th>Status</th><th>Date</th></tr></thead>
+                <thead><tr><th>Req #</th><th>Department</th><th>Items</th><th>Priority</th><th>Status</th><th>Raised By</th><th>Date</th></tr></thead>
                 <tbody>
                   {reqs.map(r => (
                     <tr key={r._id}>
                       <td className="font-mono" style={{ color: 'var(--indigo)', fontWeight: 700, fontSize: '.8rem' }}>{r.requestNumber}</td>
-                      <td className="text-sm">{r.items?.length} items</td>
+                      <td style={{ textTransform: 'capitalize', fontWeight: 500, fontSize: '.8125rem' }}>{r.department}</td>
+                      <td className="text-sm">{r.items?.length} items — {r.items?.slice(0,2).map(i => i.itemName).join(', ')}{r.items?.length > 2 ? '…' : ''}</td>
                       <td><span className={`badge ${r.priority === 'urgent' ? 'badge-red' : r.priority === 'high' ? 'badge-amber' : 'badge-muted'}`}>{r.priority}</span></td>
                       <td><span style={{ background: (statusColor[r.status] || 'var(--text-4)') + '18', color: statusColor[r.status], borderRadius: 20, padding: '2px 8px', fontSize: '.72rem', fontWeight: 700 }}>{r.status?.replace('_', ' ')}</span></td>
+                      <td className="text-sm">{r.requestedBy?.name || '—'}</td>
                       <td className="text-sm text-3">{fmt.date(r.createdAt)}</td>
                     </tr>
                   ))}
@@ -825,7 +910,7 @@ function AssistantsTab() {
           <FG label="Email" required><input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></FG>
         </div>
         <div className="form-row cols-2">
-          <FG label="Mobile"><input type="tel" value={form.mobile} onChange={e => setForm({ ...form, mobile: e.target.value })} /></FG>
+          <FG label="Mobile"><input type="tel" maxLength={10} pattern="\d{10}" onKeyPress={e=>!/[0-9]/.test(e.key)&&e.preventDefault()} value={form.mobile} onChange={e => setForm({ ...form, mobile: e.target.value })} /></FG>
           <FG label={form._id ? 'New Password (leave blank to keep)' : 'Password'} required={!form._id}><input type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} /></FG>
         </div>
       </Modal>
@@ -836,39 +921,43 @@ function AssistantsTab() {
 // ── STORE PAGE ───────────────────────────────────────────────────
 export default function StorePage({ defaultTab }) {
   const { user } = useAuth();
+  const isDeptMgr = DEPT_MGR_ROLES.includes(user?.role);
 
-  const allTabs = [
-    { id: 'items',       label: 'Inventory' },
-    { id: 'grc',         label: 'GRC / Delivery' },
-    { id: 'internal',    label: 'Internal Requests' },
-    { id: 'procurement', label: 'Procurement Reqs' },
-    { id: 'tracking',    label: 'Order Tracking' },
-    ...(user?.role === 'store_manager' ? [{ id: 'assistants', label: 'Assistants' }] : []),
-  ];
+  const allTabs = isDeptMgr
+    ? [{ id: 'internal', label: 'My Department Requests' }]
+    : [
+        { id: 'items',       label: 'Inventory' },
+        { id: 'grc',         label: 'GRC / Delivery' },
+        { id: 'internal',    label: 'Internal Requests' },
+        { id: 'procurement', label: 'Procurement Reqs' },
+        { id: 'tracking',    label: 'Order Tracking' },
+        ...(user?.role === 'store_manager' ? [{ id: 'assistants', label: 'Assistants' }] : []),
+      ];
 
-  const resolvedDefault = allTabs.find(t => t.id === defaultTab) ? defaultTab : 'items';
+  const resolvedDefault = isDeptMgr ? 'internal' : (allTabs.find(t => t.id === defaultTab) ? defaultTab : 'items');
   const [tab, setTab] = useState(resolvedDefault);
 
   useEffect(() => {
+    if (isDeptMgr) { setTab('internal'); return; }
     if (defaultTab) {
       const valid = allTabs.find(t => t.id === defaultTab);
       setTab(valid ? defaultTab : 'items');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [defaultTab]);
+  }, [defaultTab, isDeptMgr]);
 
   return (
     <div className="page">
-      <PageHdr icon={Package} title="Store Management" color="var(--amber)" />
+      <PageHdr icon={Package} title={isDeptMgr ? 'Store — Internal Requests' : 'Store Management'} color="var(--amber)" />
       <div style={{ padding: '0 24px', background: 'var(--white)', borderBottom: '1.5px solid var(--border)' }}>
         <Tabs tabs={allTabs} active={tab} onChange={setTab} />
       </div>
       <div className="page-body">
-        {tab === 'items'       && <ItemsTab setTab={setTab} />}
-        {tab === 'grc'         && <GRCTab setTab={setTab} />}
-        {tab === 'internal'    && <InternalRequestsTab setTab={setTab} />}
-        {tab === 'procurement' && <ProcurementRequestsTab setTab={setTab} />}
-        {tab === 'tracking'    && <OrderTrackingTab setTab={setTab} />}
+        {tab === 'items'       && !isDeptMgr && <ItemsTab setTab={setTab} />}
+        {tab === 'grc'         && !isDeptMgr && <GRCTab setTab={setTab} />}
+        {tab === 'internal'    && <InternalRequestsTab setTab={setTab} user={user} />}
+        {tab === 'procurement' && !isDeptMgr && <ProcurementRequestsTab setTab={setTab} />}
+        {tab === 'tracking'    && !isDeptMgr && <OrderTrackingTab setTab={setTab} />}
         {tab === 'assistants'  && user?.role === 'store_manager' && <AssistantsTab />}
       </div>
     </div>
