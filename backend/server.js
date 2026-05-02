@@ -12,9 +12,23 @@ const fs = require('fs');
 
 require('./config/database')();
 const app = express();
+app.set('trust proxy', 1);
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:5173', credentials: true }));
+
+// CORS — allows same-origin (no Origin header), localhost dev, and any origin listed in CLIENT_URL / CLIENT_URLS (comma-separated).
+const allowedOrigins = (process.env.CLIENT_URLS || process.env.CLIENT_URL || '')
+  .split(',').map(s => s.trim()).filter(Boolean);
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true); // same-origin / curl / mobile
+    if (process.env.NODE_ENV !== 'production') return cb(null, true); // permissive in dev
+    if (allowedOrigins.length === 0) return cb(null, true); // not configured -> allow all
+    if (allowedOrigins.includes(origin)) return cb(null, true);
+    return cb(new Error('CORS: origin not allowed: ' + origin));
+  },
+  credentials: true,
+}));
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 2000 }));
 app.use(morgan('dev'));
 app.use(express.json({ limit: '30mb' }));
