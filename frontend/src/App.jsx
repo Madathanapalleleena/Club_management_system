@@ -8,6 +8,9 @@ import Login from './components/auth/Login';
 import { LoadingPage } from './components/ui';
 
 import ChairmanDashboard from './components/modules/dashboard/ChairmanDashboard';
+import ChairProcurementPage from './components/modules/dashboard/ChairProcurementPage';
+import ChairAnalyticsPage from './components/modules/dashboard/ChairAnalyticsPage';
+import ChairInventoryPage from './components/modules/dashboard/ChairInventoryPage';
 import GMDashboard from './components/modules/dashboard/GMDashboard';
 import AGMDashboard from './components/modules/dashboard/AGMDashboard';
 import DirectorDashboard from './components/modules/dashboard/DirectorDashboard';
@@ -108,6 +111,9 @@ function AppRoutes() {
         <Route path="accounts/records"       element={<Guard roles={ACCT}><AccountsPage/></Guard>}/>
         <Route path="hr/staff"               element={<Guard roles={HR}><HRPage/></Guard>}/>
         <Route path="directors"              element={<Guard roles={['chairman','secretary']}><DirectorsPage/></Guard>}/>
+        <Route path="chair/requests"         element={<Guard roles={['chairman','secretary']}><ChairProcurementPage/></Guard>}/>
+        <Route path="chair/analytics"        element={<Guard roles={['chairman','secretary']}><ChairAnalyticsPage/></Guard>}/>
+        <Route path="chair/inventory"        element={<Guard roles={['chairman','secretary']}><ChairInventoryPage/></Guard>}/>
 
         <Route path="*" element={<Navigate to="/" replace/>}/>
       </Route>

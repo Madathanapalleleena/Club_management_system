@@ -362,7 +362,7 @@ export default function BanquetPage() {
   return (
     <div className="page">
       <PageHdr icon={Building2} title="Banquet Management" color="var(--violet)">
-        <button className="btn btn-ghost btn-sm" onClick={()=>banquetAPI.runReminders().then(r=>toast.success()).catch(()=>{})}><Clock size={13}/> Run Alerts</button>
+        <button className="btn btn-ghost btn-sm" onClick={()=>Promise.all([banquetAPI.runReminders(), banquetAPI.runAlerts()]).then(()=>toast.success('Alerts run successfully!')).catch(()=>{})}><Clock size={13}/> Run Alerts</button>
       </PageHdr>
       <div style={{padding:"0 24px",background:"var(--white)",borderBottom:"1.5px solid var(--border)"}}>
         <Tabs tabs={[{id:"dashboard",label:"Dashboard"},{id:"bookings",label:"Bookings"},{id:"calendar",label:"Calendar"}]} active={tab} onChange={setTab}/>

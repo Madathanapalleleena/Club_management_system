@@ -5,6 +5,14 @@ export const fmt = {
   datetime:d => d ? format(new Date(d), 'dd MMM yyyy, HH:mm') : '—',
   ago:     d => d ? formatDistanceToNow(new Date(d), { addSuffix: true }) : '—',
   inr:     n => n != null ? '₹' + Number(n).toLocaleString('en-IN', {minimumFractionDigits:0,maximumFractionDigits:2}) : '—',
+  inrCompact: n => {
+    if (n == null) return '—';
+    const num = Number(n);
+    if (num >= 10000000) return '₹' + (num / 10000000).toFixed(2) + 'Cr';
+    if (num >= 100000) return '₹' + (num / 100000).toFixed(2) + 'L';
+    if (num >= 1000) return '₹' + (num / 1000).toFixed(1) + 'k';
+    return '₹' + num.toLocaleString('en-IN', {maximumFractionDigits:0});
+  },
   num:     n => n != null ? Number(n).toLocaleString('en-IN') : '—',
   pct:     n => n != null ? Number(n).toFixed(1) + '%' : '—',
 };

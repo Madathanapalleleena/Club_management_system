@@ -140,7 +140,7 @@ function ItemsTab() {
           <Stat label="Critical" value={sum.critical} color="var(--red)" />
           <Stat label="Out of Stock" value={sum.outOfStock} color="var(--red)" />
           <Stat label="Expiring (50d)" value={sum.expiringSoon} color="var(--violet)" />
-          <Stat label="Stock Value" value={fmt.inr(sum.totalValue)} color="var(--indigo)" />
+          <Stat label="Stock Value" value={fmt.inrCompact(sum.totalValue)} color="var(--indigo)" />
         </div>
       )}
       <div className="flex items-center justify-between" style={{ gap: 8, flexWrap: 'wrap' }}>
@@ -168,7 +168,7 @@ function ItemsTab() {
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
             <div className="table-wrap">
               <table>
-                <thead><tr><th>Item Name</th><th>Type</th><th>Category</th><th>Stock</th><th>Threshold</th><th>Last Purchased</th><th>Unit Price</th><th>Expiry</th><th>Status</th><th></th></tr></thead>
+                <thead><tr><th>Item Name</th><th>Category</th><th>Stock</th><th>Last Purchased</th><th>Unit Price</th><th>Expiry</th><th>Status</th><th></th></tr></thead>
                 <tbody>
                   {items.map(i => {
                     const b = stockBadge(i.stockStatus), exp = expiry(i);
@@ -176,17 +176,16 @@ function ItemsTab() {
                     const pct = i.thresholdValue > 0 ? Math.min(100, Math.round((i.quantity / i.thresholdValue) * 100)) : 100;
                     return (
                       <tr key={i._id}>
-                        <td style={{ fontWeight: 600 }}>{i.name}</td>
-                        <td className="text-sm text-3" style={{ textTransform: 'capitalize' }}>{i.itemType}</td>
+                        <td>
+                          <div style={{ fontWeight: 600 }}>{i.name}</div>
+                          <div className="text-xs text-3" style={{ textTransform: 'capitalize', marginTop: 1 }}>{i.itemType}</div>
+                        </td>
                         <td className="text-sm">{i.category}</td>
                         <td>
                           <div style={{ fontWeight: 800, color: qc, fontSize: '.9rem' }}>{fmt.num(i.quantity)}<span className="text-3 text-sm" style={{ fontWeight: 400 }}> {i.unit}</span></div>
-                          <div className="progress-bar" style={{ marginTop: 3, width: 70 }}><div className="progress-fill" style={{ width: `${pct}%`, background: qc }} /></div>
-                          {i.thresholdValue > 0 && pct < 50 && (
-                            <div style={{ fontSize: '.7rem', color: 'var(--red)', fontWeight: 700, marginTop: 2, display: 'flex', alignItems: 'center', gap: 2 }}><AlertTriangle size={10} /> {'<'} 50% Alert</div>
-                          )}
+                          <div className="progress-bar" style={{ marginTop: 3, width: 64 }}><div className="progress-fill" style={{ width: `${pct}%`, background: qc }} /></div>
+                          {i.thresholdValue > 0 && <div style={{ fontSize: '.68rem', color: 'var(--text-4)', marginTop: 2 }}>Min {i.thresholdValue} {i.unit}{pct < 50 ? <span style={{ color: 'var(--red)', fontWeight: 700, marginLeft: 4 }}>⚠ Low</span> : ''}</div>}
                         </td>
-                        <td className="text-sm text-3">{i.thresholdValue} {i.unit}</td>
                         <td className="text-sm text-3">{i.lastPurchased ? fmt.date(i.lastPurchased) : '—'}</td>
                         <td className="text-sm">{fmt.inr(i.unitPrice)}/{i.unit}</td>
                         <td>{exp ? (<span style={{ fontSize: '.75rem', fontWeight: 700, color: exp.color, display: 'flex', alignItems: 'center', gap: 3 }}><AlertTriangle size={11} />{exp.label}</span>) : i.expiryDate ? <span className="text-xs text-3">{fmt.date(i.expiryDate)}</span> : '—'}</td>
@@ -460,7 +459,7 @@ function InternalRequestsTab({ setTab, user }) {
 
   const openReturn = r => {
     setReturnModal(r);
-    setReturnForm(r.items.filter(i => i.status === 'issued' || i.status === 'approved').map(i => ({ itemId: i.itemId, itemName: i.itemName, quantity: '', unit: i.unit || '', notes: '' })));
+    setReturnForm(r.items.filter(i => i.itemStatus === 'issued').map(i => ({ itemId: i.itemId, itemName: i.itemName, quantity: '', unit: i.unit || '', notes: '' })));
   };
 
   const submitReturn = async () => {
@@ -517,9 +516,8 @@ function InternalRequestsTab({ setTab, user }) {
                         <td>
                           <div style={{ display: 'flex', gap: 4 }}>
                             <button className="btn btn-icon btn-ghost btn-sm" onClick={() => setDetailModal(r)} title="View"><Eye size={13} /></button>
-                            {r.status === 'pending' && <><button className="btn btn-ghost btn-xs" style={{ color: 'var(--emerald)' }} onClick={() => action(r._id, 'approve')}>Approve</button><button className="btn btn-ghost btn-xs" style={{ color: 'var(--red)' }} onClick={() => action(r._id, 'reject')}>Reject</button></>}
-                            {r.status === 'approved' && <button className="btn btn-ghost btn-xs" style={{ color: 'var(--indigo)' }} onClick={() => action(r._id, 'issue')}>Issue Items</button>}
-                            {(r.status === 'issued' || r.status === 'approved') && <button className="btn btn-ghost btn-xs" style={{ color: 'var(--sky)' }} onClick={() => openReturn(r)}><RotateCcw size={11} /> Return</button>}
+                            {r.status === 'pending' && <><button className="btn btn-ghost btn-xs" style={{ color: 'var(--emerald)' }} onClick={() => action(r._id, 'approve')}>Accept &amp; Issue</button><button className="btn btn-ghost btn-xs" style={{ color: 'var(--red)' }} onClick={() => action(r._id, 'reject')}>Reject</button></>}
+                            {r.status === 'issued' && <button className="btn btn-ghost btn-xs" style={{ color: 'var(--sky)' }} onClick={() => openReturn(r)}><RotateCcw size={11} /> Return</button>}
                           </div>
                         </td>
                       </tr>

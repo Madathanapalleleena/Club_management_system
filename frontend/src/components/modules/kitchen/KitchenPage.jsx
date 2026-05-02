@@ -1,7 +1,7 @@
 // Kitchen.jsx
 import React, { useState, useEffect } from 'react';
 import { UtensilsCrossed, Plus, Trash2 } from 'lucide-react';
-import { kitchenAPI } from '../../../api';
+import { kitchenAPI, storeAPI } from '../../../api';
 import { fmt, reqBadge, priBadge } from '../../../utils/helpers';
 import { Modal, FG, PageHdr, Empty, Tabs } from '../../ui';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -12,11 +12,22 @@ const UNITS = ['kg','g','litre','ml','pcs','box','can','bottle','packet'];
 
 function KitchenRequestsTab() {
   const [reqs, setReqs]    = useState([]);
+  const [storeItems, setStoreItems] = useState([]);
   const [loading, setLoad] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [modal, setModal]  = useState(false);
   const [form, setForm]    = useState({ priority:'medium', notes:'', items:[{itemName:'',quantity:'',unit:'kg',category:''}] });
 
-  const load = () => { setLoad(true); kitchenAPI.requests().then(r=>setReqs(r.data)).finally(()=>setLoad(false)); };
+  const load = () => { 
+    setLoad(true); 
+    Promise.all([
+      kitchenAPI.requests(),
+      storeAPI.items({ isActive: true })
+    ]).then(([r, s]) => {
+      setReqs(r.data);
+      setStoreItems(s.data);
+    }).finally(()=>setLoad(false)); 
+  };
   useEffect(()=>{load();},[]);
 
   const addRow    = () => setForm(f=>({...f,items:[...f.items,{itemName:'',quantity:'',unit:'kg',category:''}]}));
@@ -25,8 +36,18 @@ function KitchenRequestsTab() {
 
   const save = async () => {
     if(!form.items[0].itemName) return toast.error('Add at least one item');
-    try { await kitchenAPI.createRequest(form); toast.success('Request raised'); load(); setModal(false); setForm({priority:'medium',notes:'',items:[{itemName:'',quantity:'',unit:'kg',category:''}]}); }
-    catch(e) { toast.error(e.response?.data?.message||'Failed'); }
+    setSaving(true);
+    try { 
+      await kitchenAPI.createRequest(form); 
+      toast.success('Request raised'); 
+      load(); 
+      setModal(false); 
+      setForm({priority:'medium',notes:'',items:[{itemName:'',quantity:'',unit:'kg',category:''}]}); 
+    } catch(e) { 
+      toast.error(e.response?.data?.message||'Failed'); 
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -61,7 +82,7 @@ function KitchenRequestsTab() {
         </div>
       }
       <Modal open={modal} onClose={()=>setModal(false)} title="Raise Kitchen Request" size="modal-lg"
-        footer={<><button className="btn btn-ghost btn-sm" onClick={()=>setModal(false)}>Cancel</button><button className="btn btn-primary btn-sm" onClick={save}>Submit</button></>}
+        footer={<><button className="btn btn-ghost btn-sm" onClick={()=>setModal(false)}>Cancel</button><button className="btn btn-primary btn-sm" onClick={save} disabled={saving}>{saving?'Submitting...':'Submit'}</button></>}
       >
         <FG label="Priority">
           <select value={form.priority} onChange={e=>setForm({...form,priority:e.target.value})}>
@@ -75,7 +96,16 @@ function KitchenRequestsTab() {
           </div>
           {form.items.map((it,i)=>(
             <div key={i} style={{display:'grid',gridTemplateColumns:'2fr 1fr 0.7fr 0.7fr 28px',gap:6,marginBottom:6}}>
-              <input placeholder="Item name *" value={it.itemName} onChange={e=>setItem(i,'itemName',e.target.value)} />
+              <select value={it.itemName} onChange={e=>{
+                const val = e.target.value;
+                const found = storeItems.find(x => x.name === val);
+                const updated = { itemName: val };
+                if (found) { updated.category = found.category || ''; updated.unit = found.unit || 'kg'; }
+                setForm(f => ({ ...f, items: f.items.map((x, idx) => idx === i ? { ...x, ...updated } : x) }));
+              }}>
+                <option value="">Select Item...</option>
+                {storeItems.map(si => <option key={si._id} value={si.name}>{si.name}</option>)}
+              </select>
               <input placeholder="Category" value={it.category} onChange={e=>setItem(i,'category',e.target.value)} />
               <input placeholder="Qty" type="number" value={it.quantity} onChange={e=>setItem(i,'quantity',e.target.value)} />
               <select value={it.unit} onChange={e=>setItem(i,'unit',e.target.value)}>{UNITS.map(u=><option key={u} value={u}>{u}</option>)}</select>

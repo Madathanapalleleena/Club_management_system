@@ -44,7 +44,7 @@ router.get('/items/:id', protect, async (req, res) => {
 
 router.post('/items', protect, async (req, res) => {
   try {
-    const item = await Item.create({ ...req.body, createdBy: req.user._id });
+    const item = await Item.create({ ...req.body, createdBy: req.user._id, lastPurchased: new Date() });
     if (item.quantity > 0) await StockTxn.create({ item: item._id, type: 'initial', quantity: item.quantity, previousQty: 0, newQty: item.quantity, performedBy: req.user._id });
     res.status(201).json(item);
   } catch (e) { res.status(500).json({ message: e.message }); }
@@ -254,34 +254,62 @@ router.put('/internal-requests/:id', protect, async (req, res) => {
     const log = { performedBy: req.user._id, performedAt: new Date() };
 
     if (action === 'approve') {
-      ir.status = 'approved'; ir.approvedBy = req.user._id; ir.approvedAt = new Date();
-      log.action = 'approved'; log.note = `Approved by ${req.user.name}`;
-      await Notif.notifyUser(ir.requestedBy._id, '✅ Request Approved', `${ir.requestNumber} approved by ${req.user.name}`, 'success', ir._id, 'store');
+      ir.approvedBy = req.user._id; ir.approvedAt = new Date();
+      for (const it of ir.items) {
+        const item = it.itemId
+          ? await Item.findById(it.itemId)
+          : await Item.findOne({ name: { $regex: `^${it.itemName.trim()}$`, $options: 'i' }, isActive: true });
+        if (item) {
+          it.itemId     = item._id;
+          it.approvedQty = it.quantity;
+          it.issuedQty   = it.quantity;
+          it.itemStatus  = 'issued';
+          const prev = item.quantity, qty = it.quantity;
+          item.quantity = Math.max(0, item.quantity - qty);
+          item.lastUpdatedBy = req.user._id;
+          await item.save();
+          await StockTxn.create({ item: item._id, type: 'deduction', quantity: qty, previousQty: prev, newQty: item.quantity, performedBy: req.user._id, linkedRequest: ir._id, notes: `Issued for ${ir.requestNumber}` });
+          if (['critical','out_of_stock'].includes(item.stockStatus))
+            await Notif.notifyRoles(['store_manager','store_assistant'], '⚠️ Low Stock After Issuance', `${item.name}: ${item.quantity} ${item.unit} remaining`, 'alert', item._id, 'store');
+        }
+      }
+      ir.issuedBy = req.user._id; ir.issuedAt = new Date();
+      ir.status = 'issued';
+      log.action = 'issued'; log.note = `Accepted & issued by ${req.user.name}`;
+      await Notif.notifyUser(ir.requestedBy._id, '📦 Request Accepted — Items Issued', `${ir.requestNumber} accepted and items issued from store by ${req.user.name}`, 'success', ir._id, 'store');
     } else if (action === 'reject') {
       ir.status = 'rejected'; ir.approvedBy = req.user._id;
       log.action = 'rejected'; log.note = note || `Rejected by ${req.user.name}`;
       await Notif.notifyUser(ir.requestedBy._id, '❌ Request Rejected', `${ir.requestNumber} rejected by ${req.user.name}`, 'alert', ir._id, 'store');
     } else if (action === 'partial_approve' && itemUpdates) {
-      ir.status = 'partially_approved'; ir.approvedBy = req.user._id; ir.approvedAt = new Date();
-      ir.items = ir.items.map(it => { const u = itemUpdates.find(x => x._id === it._id?.toString()); return u ? { ...it.toObject(), approvedQty: u.approvedQty, itemStatus: 'approved' } : it; });
-      log.action = 'partially_approved'; log.note = `Partially approved by ${req.user.name}`;
-      await Notif.notifyUser(ir.requestedBy._id, '⚠️ Partially Approved', `${ir.requestNumber} — some quantities adjusted by ${req.user.name}`, 'warning', ir._id, 'store');
-    } else if (action === 'issue') {
-      ir.status = 'issued'; ir.issuedBy = req.user._id; ir.issuedAt = new Date();
+      ir.approvedBy = req.user._id; ir.approvedAt = new Date();
       for (const it of ir.items) {
-        if (it.itemId) {
-          const item = await Item.findById(it.itemId);
-          if (item) {
-            const prev = item.quantity; const issueQty = it.approvedQty || it.quantity;
-            item.quantity = Math.max(0, item.quantity - issueQty);
-            item.lastUpdatedBy = req.user._id; await item.save();
-            await StockTxn.create({ item: item._id, type: 'deduction', quantity: issueQty, previousQty: prev, newQty: item.quantity, performedBy: req.user._id, linkedRequest: ir._id, notes: `Issued for ${ir.requestNumber}` });
-            if (['critical','out_of_stock'].includes(item.stockStatus)) await Notif.notifyRoles(['store_manager','store_assistant'], '⚠️ Low After Issuance', `${item.name}: ${item.quantity} ${item.unit}`, 'alert', item._id, 'store');
+        const u = itemUpdates.find(x => x._id === it._id?.toString());
+        if (u) {
+          it.approvedQty = u.approvedQty;
+          it.itemStatus  = 'issued';
+          if (u.approvedQty > 0) {
+            const item = it.itemId
+              ? await Item.findById(it.itemId)
+              : await Item.findOne({ name: { $regex: `^${it.itemName.trim()}$`, $options: 'i' }, isActive: true });
+            if (item) {
+              it.itemId    = item._id;
+              it.issuedQty = u.approvedQty;
+              const prev   = item.quantity;
+              item.quantity = Math.max(0, item.quantity - u.approvedQty);
+              item.lastUpdatedBy = req.user._id;
+              await item.save();
+              await StockTxn.create({ item: item._id, type: 'deduction', quantity: u.approvedQty, previousQty: prev, newQty: item.quantity, performedBy: req.user._id, linkedRequest: ir._id, notes: `Partial issue for ${ir.requestNumber}` });
+              if (['critical','out_of_stock'].includes(item.stockStatus))
+                await Notif.notifyRoles(['store_manager','store_assistant'], '⚠️ Low Stock After Issuance', `${item.name}: ${item.quantity} ${item.unit} remaining`, 'alert', item._id, 'store');
+            }
           }
         }
       }
-      log.action = 'issued'; log.note = `Items issued by ${req.user.name}`;
-      await Notif.notifyUser(ir.requestedBy._id, '📦 Items Issued', `${ir.requestNumber} fulfilled by ${req.user.name}`, 'success', ir._id, 'store');
+      ir.issuedBy = req.user._id; ir.issuedAt = new Date();
+      ir.status = 'issued';
+      log.action = 'partially_issued'; log.note = `Partially accepted & issued by ${req.user.name}`;
+      await Notif.notifyUser(ir.requestedBy._id, '⚠️ Partially Accepted & Issued', `${ir.requestNumber} — adjusted quantities issued by ${req.user.name}`, 'warning', ir._id, 'store');
     } else if (action === 'flag_missing') {
       ir.missingItemsFlag = true; log.action = 'missing_flagged'; log.note = `Missing items flagged by ${req.user.name}`;
       await Notif.notifyRoles(['procurement_manager','gm'], '🔴 Missing Items', `${ir.requestNumber} — items not in stock`, 'alert', ir._id, 'store');

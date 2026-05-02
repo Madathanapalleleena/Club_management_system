@@ -9,6 +9,8 @@ const DEMO = [
   ['Chairman',          'chairman@club.com',    '#b45309'],
   ['Secretary',         'secretary@club.com',   '#7c3aed'],
   ['General Manager',   'gm@club.com',          '#0369a1'],
+  ['Asst Gen Manager',  'agm@club.com',         '#0284c7'],
+  ['Director',          'rama@gmail.com',       '#be185d'],
   ['Procurement Mgr',   'procurement@club.com', '#065f46'],
   ['Store Manager',     'store@club.com',        '#92400e'],
   ['Kitchen Manager',   'kitchen@club.com',     '#dc2626'],

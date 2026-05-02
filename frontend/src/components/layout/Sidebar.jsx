@@ -1,45 +1,58 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard,Shield,Users,ShoppingCart,Package,UtensilsCrossed,Calculator,UserCog,Wrench,Wine,Building2,Trophy,LogOut,Star,ChevronRight,Hotel,CalendarDays } from 'lucide-react';
+import { LayoutDashboard,Shield,Users,ShoppingCart,Package,UtensilsCrossed,Calculator,UserCog,Wrench,Wine,Building2,Trophy,LogOut,Star,ChevronRight,Hotel,CalendarDays,ClipboardList,BarChart2,Archive } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { roleColor, roleBg, roleLabel, initials } from '../../utils/helpers';
+import { dashAPI } from '../../api';
 
+const CHAIR = ['chairman','secretary'];
 const NAV = [
-  { id:'home',        label:'Dashboard',    path:'/',               icon:LayoutDashboard, roles:null },
-  { id:'directors',   label:'Directors',    path:'/directors',      icon:Shield,          roles:['chairman','secretary'] },
-  { id:'procurement', label:'Procurement',  icon:ShoppingCart,      roles:['chairman','secretary','gm','agm','director','procurement_manager','procurement_assistant'],
-    children:[{label:'Dashboard',path:'/procurement'},{label:'Requirements',path:'/procurement/requests'},{label:'Vendors',path:'/procurement/vendors'},{label:'Purchase Orders',path:'/procurement/orders'},{label:'Order Tracking',path:'/procurement/tracking'},{label:'Quality & GRC',path:'/procurement/quality'}] },
-  { id:'store',       label:'Store',        icon:Package,           roles:['chairman','secretary','gm','agm','store_manager','store_assistant','procurement_manager','bar_manager','banquet_manager','rooms_manager','sports_manager','maintenance_manager','hr_manager','accounts_manager'],
+  { id:'home',            label:'Dashboard',            path:'/',                    icon:LayoutDashboard, roles:null },
+  { id:'directors',       label:'Directors',            path:'/directors',           icon:Shield,          roles:CHAIR },
+  { id:'chair-requests',  label:'Procurement Requests', path:'/chair/requests',      icon:ClipboardList,   roles:CHAIR },
+  { id:'chair-analytics', label:'Dept Analytics',       path:'/chair/analytics',     icon:BarChart2,       roles:CHAIR },
+  { id:'chair-inventory', label:'Inventory & Stock',    path:'/chair/inventory',     icon:Archive,         roles:CHAIR },
+  { id:'procurement', label:'Procurement',  icon:ShoppingCart,      roles:['gm','agm','director','procurement_manager','procurement_assistant'],
+    children:[{label:'Requirements',path:'/procurement/requests'},{label:'Vendors',path:'/procurement/vendors'},{label:'Purchase Orders',path:'/procurement/orders'},{label:'Order Tracking',path:'/procurement/tracking'},{label:'Quality & GRC',path:'/procurement/quality'}] },
+  { id:'store',       label:'Store',        icon:Package,           roles:['gm','agm','store_manager','store_assistant','procurement_manager'],
     children:[
-      {label:'Dashboard',path:'/store',roles:['chairman','secretary','gm','agm','store_manager','store_assistant','procurement_manager']},
-      {label:'Inventory',path:'/store/inventory',roles:['chairman','secretary','gm','agm','store_manager','store_assistant','procurement_manager']},
-      {label:'GRC',path:'/store/grc',roles:['chairman','secretary','gm','agm','store_manager','store_assistant','procurement_manager']},
+      {label:'Inventory',path:'/store/inventory',roles:['gm','agm','store_manager','store_assistant','procurement_manager']},
+      {label:'GRC',path:'/store/grc',roles:['gm','agm','store_manager','store_assistant','procurement_manager']},
       {label:'Internal Requests',path:'/store/requests'},
-      {label:'Order Tracking',path:'/store/tracking',roles:['chairman','secretary','gm','agm','store_manager','store_assistant','procurement_manager']},
+      {label:'Order Tracking',path:'/store/tracking',roles:['gm','agm','store_manager','store_assistant','procurement_manager']},
       {label:'Assistants',path:'/store/assistants',roles:['store_manager']},
     ] },
-
-  { id:'kitchen',     label:'Kitchen',      icon:UtensilsCrossed,   roles:['chairman','secretary','gm','agm','kitchen_manager','food_control'],
-    children:[{label:'Dashboard',path:'/kitchen'},{label:'Requests',path:'/kitchen/requests'},{label:'Utilization',path:'/kitchen/utilization'}] },
-  { id:'banquet',     label:'Banquet',      path:'/banquet',        icon:CalendarDays,    roles:['chairman','secretary','gm','agm','banquet_manager'] },
-  { id:'rooms',       label:'Rooms & Hotel',path:'/rooms',          icon:Hotel,           roles:['chairman','secretary','gm','agm','rooms_manager'] },
-  { id:'bar',         label:'Bar & Liquor', path:'/bar',            icon:Wine,            roles:['chairman','secretary','gm','agm','bar_manager'] },
-  { id:'sports',      label:'Sports',       path:'/sports',         icon:Trophy,          roles:['chairman','secretary','gm','agm','sports_manager'] },
-  { id:'accounts',    label:'Accounts',     icon:Calculator,        roles:['chairman','secretary','gm','agm','accounts_manager'],
-    children:[{label:'Dashboard',path:'/accounts'},{label:'P&L / Records',path:'/accounts/records'}] },
-  { id:'hr',          label:'HR & Staff',   icon:UserCog,           roles:['chairman','secretary','gm','agm','hr_manager'],
-    children:[{label:'Dashboard',path:'/hr'},{label:'Staff List',path:'/hr/staff'}] },
-  { id:'maintenance', label:'Maintenance',  path:'/maintenance',    icon:Wrench,          roles:['chairman','secretary','gm','agm','maintenance_manager'] },
+  { id:'kitchen',     label:'Kitchen',      icon:UtensilsCrossed,   roles:['gm','agm','kitchen_manager','food_control'],
+    children:[{label:'Requests',path:'/kitchen/requests'},{label:'Utilization',path:'/kitchen/utilization'}] },
+  { id:'banquet',     label:'Banquet',      path:'/banquet',        icon:CalendarDays,    roles:['gm','agm','banquet_manager'] },
+  { id:'rooms',       label:'Rooms & Hotel',path:'/rooms',          icon:Hotel,           roles:['gm','agm','rooms_manager'] },
+  { id:'bar',         label:'Bar & Liquor', path:'/bar',            icon:Wine,            roles:['gm','agm','bar_manager'] },
+  { id:'sports',      label:'Sports',       path:'/sports',         icon:Trophy,          roles:['gm','agm','sports_manager'] },
+  { id:'accounts',    label:'Accounts',     icon:Calculator,        roles:['gm','agm','accounts_manager'],
+    children:[{label:'P&L / Records',path:'/accounts/records'}] },
+  { id:'hr',          label:'HR & Staff',   icon:UserCog,           roles:['gm','agm','hr_manager'],
+    children:[{label:'Staff List',path:'/hr/staff'}] },
+  { id:'maintenance', label:'Maintenance',  path:'/maintenance',    icon:Wrench,          roles:['gm','agm','maintenance_manager'] },
 ];
 
 export default function Sidebar({ collapsed }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [expanded, setExpanded] = React.useState({});
+  const [expanded, setExpanded] = useState({});
+  const [pendingCount, setPendingCount] = useState(0);
   const color = roleColor(user?.role);
   const bg    = roleBg(user?.role);
   const visNav = NAV.filter(n => !n.roles || n.roles.includes(user?.role || ''));
   const toggle = id => setExpanded(e => ({ ...e, [id]: !e[id] }));
+
+  // Fetch pending procurement count for chairman/secretary
+  useEffect(() => {
+    if (!CHAIR.includes(user?.role)) return;
+    const fetch = () => dashAPI.chairman({}).then(r => setPendingCount(r.data?.procStats?.pending || 0)).catch(() => {});
+    fetch();
+    const timer = setInterval(fetch, 60000);
+    return () => clearInterval(timer);
+  }, [user?.role]);
 
   return (
     <div className="sidebar" style={{ width: collapsed ? 62 : 'var(--sidebar-w)' }}>
@@ -77,10 +90,23 @@ export default function Sidebar({ collapsed }) {
               </div>
             );
           }
+          const showBadge = item.id === 'chair-requests' && pendingCount > 0;
           return (
             <NavLink key={item.id} to={item.path} end={item.path==='/'} style={({isActive})=>({display:'flex',alignItems:'center',gap:collapsed?0:10,padding:collapsed?'10px 0':'8px 14px 8px 18px',margin:collapsed?'1px 6px':'1px 8px',borderRadius:'var(--r)',justifyContent:collapsed?'center':'flex-start',color:isActive?color:'var(--text-2)',background:isActive?bg:'transparent',textDecoration:'none',fontSize:'.875rem',fontWeight:isActive?700:500,transition:'all var(--t)',borderLeft:isActive&&!collapsed?`3px solid ${color}`:'3px solid transparent'})}>
-              <span style={{flexShrink:0,display:'flex'}}><Icon size={16}/></span>
-              {!collapsed && <span style={{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.label}</span>}
+              <span style={{flexShrink:0,display:'flex',position:'relative'}}>
+                <Icon size={16}/>
+                {showBadge && collapsed && (
+                  <span style={{position:'absolute',top:-5,right:-5,background:'var(--amber)',color:'#fff',borderRadius:'50%',width:14,height:14,fontSize:'.6rem',fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>
+                    {pendingCount > 9 ? '9+' : pendingCount}
+                  </span>
+                )}
+              </span>
+              {!collapsed && <span style={{flex:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.label}</span>}
+              {!collapsed && showBadge && (
+                <span style={{background:'var(--amber)',color:'#fff',borderRadius:20,padding:'1px 7px',fontSize:'.7rem',fontWeight:800,flexShrink:0,lineHeight:1.6}}>
+                  {pendingCount}
+                </span>
+              )}
             </NavLink>
           );
         })}

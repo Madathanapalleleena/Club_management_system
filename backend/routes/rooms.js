@@ -254,4 +254,24 @@ router.get('/stats', protect, async (req, res) => {
   } catch (e) { res.status(500).json({ message: e.message }); }
 });
 
+router.post('/run-alerts', protect, async (req, res) => {
+  try {
+    const today = new Date();
+    const s = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
+    const e = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+
+    const checkIns = await RoomBooking.find({ checkIn: { $gte:s, $lte:e }, status: { $in:['confirmed'] } }).populate('room','roomNumber');
+    const checkOuts = await RoomBooking.find({ checkOut: { $gte:s, $lte:e }, status:'checked_in' }).populate('room','roomNumber');
+
+    if (checkIns.length > 0) {
+      await Notif.notifyRoles(['rooms_manager','gm','director'], '🏨 Daily Check-ins', `You have ${checkIns.length} expected check-ins today.`, 'info', null, 'rooms');
+    }
+    if (checkOuts.length > 0) {
+      await Notif.notifyRoles(['rooms_manager','gm','director'], '🧳 Daily Check-outs', `You have ${checkOuts.length} expected check-outs today.`, 'warning', null, 'rooms');
+    }
+    
+    res.json({ checkIns: checkIns.length, checkOuts: checkOuts.length });
+  } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
 module.exports = router;

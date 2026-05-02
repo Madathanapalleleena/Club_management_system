@@ -49,6 +49,11 @@ async function seed() {
     { name:'Ajay Menon',        email:'bar@club.com',         password:pw, role:'bar_manager',          department:'bar' },
     { name:'Latha Naidu',       email:'sports@club.com',      password:pw, role:'sports_manager',       department:'sports' },
     { name:'Ravi Shankar',      email:'maintenance@club.com', password:pw, role:'maintenance_manager',  department:'maintenance' },
+    // Directors (login accounts — one per committee)
+    { name:'Dr. Anand Krishnamurthy', email:'director.food@club.com',    password:pw, role:'director', department:'food_committee' },
+    { name:'Col. Pradeep Nambiar',    email:'director.sports@club.com',  password:pw, role:'director', department:'sports' },
+    { name:'Smt. Rekha Menon',        email:'director.rooms@club.com',   password:pw, role:'director', department:'rooms_banquets' },
+    { name:'Mr. Sunil Acharya',       email:'director.general@club.com', password:pw, role:'director', department:'general' },
   ]);
   console.log(`Users: ${users.length} created`);
 
@@ -257,16 +262,30 @@ Signatures: _________________________`,
 
   console.log('\n✅ Seed complete!');
   console.log('\nLogin credentials (all use: Admin@123):');
-  console.log('  chairman@club.com   — Chairman');
-  console.log('  gm@club.com         — General Manager');
-  console.log('  procurement@club.com — Procurement Manager');
-  console.log('  store@club.com      — Store Manager');
-  console.log('  kitchen@club.com    — Kitchen Manager');
-  console.log('  accounts@club.com   — Accounts Manager');
-  console.log('  banquet@club.com    — Banquet Manager');
-  console.log('  rooms@club.com      — Rooms Manager');
-  console.log('  bar@club.com        — Bar Manager');
-  console.log('  hr@club.com         — HR Manager');
+  console.log('--- Management ---');
+  console.log('  chairman@club.com          — Chairman');
+  console.log('  secretary@club.com         — Secretary');
+  console.log('  gm@club.com                — General Manager');
+  console.log('  agm@club.com               — Asst. General Manager (AGM)');
+  console.log('--- Directors ---');
+  console.log('  director.food@club.com     — Director, Food & Beverage Committee');
+  console.log('  director.sports@club.com   — Director, Sports Committee');
+  console.log('  director.rooms@club.com    — Director, Rooms & Banquets Committee');
+  console.log('  director.general@club.com  — Director, General Committee');
+  console.log('--- Operations ---');
+  console.log('  procurement@club.com       — Procurement Manager');
+  console.log('  procasst@club.com          — Procurement Assistant');
+  console.log('  store@club.com             — Store Manager');
+  console.log('  storeasst@club.com         — Store Assistant');
+  console.log('  kitchen@club.com           — Kitchen Manager');
+  console.log('  foodctrl@club.com          — Food Control');
+  console.log('  accounts@club.com          — Accounts Manager');
+  console.log('  hr@club.com                — HR Manager');
+  console.log('  banquet@club.com           — Banquet Manager');
+  console.log('  rooms@club.com             — Rooms Manager');
+  console.log('  bar@club.com               — Bar Manager');
+  console.log('  sports@club.com            — Sports Manager');
+  console.log('  maintenance@club.com       — Maintenance Manager');
   process.exit(0);
 }
 

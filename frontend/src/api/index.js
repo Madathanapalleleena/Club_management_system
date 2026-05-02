@@ -122,6 +122,7 @@ export const roomsAPI = {
   updateBooking: (id,d) => api.put('/rooms/bookings/' + id, d),
   cancelBooking: id => api.put('/rooms/bookings/' + id, { action: 'cancel' }),
   stats: (date) => api.get('/rooms/stats', { params: { date } }),
+  runAlerts: () => api.post('/rooms/run-alerts'),
 };
 
 export const finAPI = {
@@ -148,14 +149,15 @@ export const notifAPI = {
 };
 
 export const dashAPI = {
-  chairman:   (date) => api.get('/dashboard/chairman', { params: { date } }),
-  gm:         (date) => api.get('/dashboard/gm', { params: { date } }),
-  procurement:(date) => api.get('/dashboard/procurement', { params: { date } }),
-  store:      (date) => api.get('/dashboard/store', { params: { date } }),
-  kitchen:    (date) => api.get('/dashboard/kitchen', { params: { date } }),
-  banquet:    (date) => api.get('/dashboard/banquet', { params: { date } }),
-  rooms:      (date) => api.get('/dashboard/rooms', { params: { date } }),
-  accounts:   (date) => api.get('/dashboard/accounts', { params: { date } }),
-  hr:         (date) => api.get('/dashboard/hr', { params: { date } }),
-  department: (d, date) => api.get('/dashboard/department/' + d, { params: { date } }),
+  chairman:   (p) => api.get('/dashboard/chairman',   { params: p }),
+  gm:         (p) => api.get('/dashboard/gm',         { params: p }),
+  procurement:(p) => api.get('/dashboard/procurement', { params: p }),
+  store:      (p) => api.get('/dashboard/store',      { params: p }),
+  kitchen:    (p) => api.get('/dashboard/kitchen',    { params: p }),
+  banquet:    (p) => api.get('/dashboard/banquet',    { params: p }),
+  rooms:      (p) => api.get('/dashboard/rooms',      { params: p }),
+  accounts:   (p) => api.get('/dashboard/accounts',   { params: p }),
+  hr:         (p) => api.get('/dashboard/hr',         { params: p }),
+  department: (d, p) => api.get('/dashboard/department/' + d, { params: p }),
+  director:   (p) => api.get('/dashboard/director',   { params: p }),
 };

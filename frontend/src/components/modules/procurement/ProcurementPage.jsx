@@ -10,7 +10,7 @@ import { Modal, FG, PageHdr, Empty, Tabs, ChangeLog } from '../../ui';
 import toast from 'react-hot-toast';
 
 const DEPTS = ['kitchen','bar','restaurant','rooms','banquet','sports','store','maintenance','hr','accounts','management'];
-const DEPTS_NO_STORE = DEPTS.filter(d => d !== 'store');
+const DEPTS_NO_STORE = DEPTS.filter(d => d !== 'store' && d !== 'restaurant');
 const UNITS = ['kg','g','litre','ml','pcs','box','can','bottle','packet','roll','cylinder','bag','dozen','set','pair'];
 const VENDOR_TYPES = ['wholesale','retailer','distributor'];
 const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
@@ -115,7 +115,7 @@ function RequirementsTab({ user }) {
           </select>
           <select value={deptF} onChange={e=>setDeptF(e.target.value)} style={{width:130}}>
             <option value="">All Depts</option>
-            {DEPTS.map(d=><option key={d} value={d}>{cap(d)}</option>)}
+            {DEPTS_NO_STORE.map(d=><option key={d} value={d}>{cap(d)}</option>)}
           </select>
         </div>
       </div>
@@ -856,7 +856,7 @@ function PurchaseOrdersTab({ user }) {
           </select>
           <select value={filters.dept} onChange={e=>setF(f=>({...f,dept:e.target.value}))} style={{width:130}}>
             <option value="">All Depts</option>
-            {DEPTS.map(d=><option key={d} value={d}>{cap(d)}</option>)}
+            {DEPTS_NO_STORE.map(d=><option key={d} value={d}>{cap(d)}</option>)}
           </select>
         </div>
         <button className="btn btn-primary" onClick={()=>setModal(true)}><Plus size={14}/>Create PO</button>
@@ -1124,7 +1124,7 @@ function OrderTrackingTab() {
         </div>
         <div className="filter-bar">
           <div className="search-wrap"><span className="search-icon"><Search size={13}/></span><input style={{width:180}} placeholder="Search PO, vendor…" value={search} onChange={e=>setSearch(e.target.value)}/></div>
-          <select value={deptF} onChange={e=>setDeptF(e.target.value)} style={{width:140}}><option value="">All Departments</option>{DEPTS.map(d=><option key={d} value={d}>{cap(d)}</option>)}</select>
+          <select value={deptF} onChange={e=>setDeptF(e.target.value)} style={{width:140}}><option value="">All Departments</option>{DEPTS_NO_STORE.map(d=><option key={d} value={d}>{cap(d)}</option>)}</select>
           <select value={statusF} onChange={e=>setStatusF(e.target.value)} style={{width:140}}><option value="">All Status</option>{['draft','approved','dispatched','delivered'].map(s=><option key={s} value={s}>{s === 'approved' ? 'Order Placed' : s === 'dispatched' ? 'In Transit' : cap(s)}</option>)}</select>
           <button className="btn btn-ghost btn-sm" onClick={load}><RefreshCw size={13}/>Refresh</button>
         </div>
@@ -1134,7 +1134,7 @@ function OrderTrackingTab() {
         <div className="card" style={{padding:0,overflow:'hidden'}}>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>PO Number</th><th>Vendor</th><th>Dept</th><th>Items</th><th>Amount</th><th>Order Status</th><th>Payment</th><th>Expected Delivery</th><th>Bill</th><th>GRC</th><th>Delivery Set By</th><th></th></tr></thead>
+              <thead><tr><th>PO Number</th><th>Vendor</th><th>Dept</th><th>Items</th><th>Amount</th><th>Order Status</th><th>Payment</th><th>Expected Delivery</th><th>Bill</th><th>GRC</th><th style={{whiteSpace:'nowrap'}}>Delivery Set By</th><th></th></tr></thead>
               <tbody>
                 {filtered.map(po=>{
                   const ob=orderBadge(po.orderStatus),pb=payBadge(po.paymentStatus);
@@ -1156,7 +1156,7 @@ function OrderTrackingTab() {
                       </td>
                       <td><span className={'badge '+(po.billUploaded?'badge-green':'badge-muted')}>{po.billUploaded?'✓':'—'}</span></td>
                       <td><span className={'badge '+(po.grcUploaded?'badge-green':'badge-muted')}>{po.grcUploaded?'✓':'—'}</span></td>
-                      <td className="text-sm">{po.deliveryUpdatedBy?.name||'—'}</td>
+                      <td className="text-sm" style={{whiteSpace:'nowrap'}}>{po.deliveryUpdatedBy?.name||'—'}</td>
                       <td><button className="btn btn-ghost btn-xs" onClick={()=>{setDM(po);setDD(po.expectedDelivery?new Date(po.expectedDelivery).toISOString().slice(0,10):'');}}>Set Date</button></td>
                     </tr>
                   );

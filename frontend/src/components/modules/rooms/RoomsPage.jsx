@@ -396,7 +396,9 @@ export default function RoomsPage() {
   const [tab, setTab] = useState('dashboard');
   return (
     <div className="page">
-      <PageHdr icon={Building2} title="Rooms & Hotel" color="var(--sky)"/>
+      <PageHdr icon={Building2} title="Rooms & Hotel" color="var(--sky)">
+        <button className="btn btn-ghost btn-sm" onClick={()=>roomsAPI.runAlerts().then(r=>toast.success('Daily alerts sent!')).catch(()=>{})}><Check size={13}/> Run Daily Alerts</button>
+      </PageHdr>
       <div style={{padding:'0 24px',background:'var(--white)',borderBottom:'1.5px solid var(--border)'}}>
         <Tabs tabs={[{id:'dashboard',label:'Dashboard'},{id:'bookings',label:'Bookings'},{id:'rooms',label:'Room Management'}]} active={tab} onChange={setTab}/>
       </div>
